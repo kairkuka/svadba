@@ -2,3 +2,10 @@ builds/**/*.apk filter=lfs diff=lfs merge=lfs -text
 builds/**/*.aab filter=lfs diff=lfs merge=lfs -text
 builds/**/*.zip filter=lfs diff=lfs merge=lfs -text
 dist/**/* filter=lfs diff=lfs merge=lfs -text
+.env filter=lfs diff=lfs merge=lfs -text
+server/.env filter=lfs diff=lfs merge=lfs -text
+.expo/**/* filter=lfs diff=lfs merge=lfs -text
+*.DS_Store filter=lfs diff=lfs merge=lfs -text
+.DS_Store filter=lfs diff=lfs merge=lfs -text
+local-snapshot/**/*.tar.gz filter=lfs diff=lfs merge=lfs -text
+server/data/**/*.json filter=lfs diff=lfs merge=lfs -text
