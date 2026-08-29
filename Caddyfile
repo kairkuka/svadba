@@ -1,0 +1,4 @@
+svadba.kz, www.svadba.kz {
+	encode zstd gzip
+	reverse_proxy app:4000
+}
