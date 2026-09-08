@@ -19,6 +19,7 @@ const initialDb = {
   bookings: [],
   accountDeletionRequests: [],
   contentReports: [],
+  metaCallbacks: [],
   instagramConnections: {},
   instagramOAuthStates: {},
   vendorCalendars: {},
@@ -79,6 +80,7 @@ function readDb() {
   if (!Array.isArray(db.bookings)) db.bookings = [];
   if (!Array.isArray(db.accountDeletionRequests)) db.accountDeletionRequests = [];
   if (!Array.isArray(db.contentReports)) db.contentReports = [];
+  if (!Array.isArray(db.metaCallbacks)) db.metaCallbacks = [];
   if (!db.instagramConnections || typeof db.instagramConnections !== 'object') {
     db.instagramConnections = {};
   }
@@ -565,9 +567,7 @@ function getInstagramConfig(req) {
     clientSecret,
     enabled: Boolean(clientId && clientSecret),
     redirectUri: getInstagramRedirectUri(req),
-    scope:
-      process.env.INSTAGRAM_SCOPE ||
-      'instagram_business_basic,instagram_business_manage_insights',
+    scope: process.env.INSTAGRAM_SCOPE || 'instagram_business_basic',
   };
 }
 
@@ -864,6 +864,36 @@ async function handleApi(req, res) {
     db.accountDeletionRequests.unshift(request);
     writeDb(db);
     sendJson(res, 200, { ok: true, request });
+    return;
+  }
+
+  if (url.pathname === '/api/meta/data-deletion') {
+    const body = req.method === 'POST' ? await readBody(req) : {};
+    const request = {
+      id: `meta_delete_${Date.now()}`,
+      signedRequest: body.signed_request ? 'received' : 'missing',
+      status: 'received',
+      createdAt: new Date().toISOString(),
+    };
+    db.accountDeletionRequests.unshift(request);
+    writeDb(db);
+    sendJson(res, 200, {
+      url: `${getPublicOrigin(req)}/account-deletion`,
+      confirmation_code: request.id,
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/instagram/deauthorize') {
+    const body = req.method === 'POST' ? await readBody(req) : {};
+    db.metaCallbacks.unshift({
+      id: `ig_deauth_${Date.now()}`,
+      type: 'instagram_deauthorize',
+      received: Boolean(body.signed_request),
+      createdAt: new Date().toISOString(),
+    });
+    writeDb(db);
+    sendJson(res, 200, { ok: true });
     return;
   }
 
