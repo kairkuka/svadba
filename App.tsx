@@ -163,6 +163,16 @@ const envApiBaseUrl =
 const isWebRuntime = Platform.OS === 'web';
 const isDevRuntime =
   typeof process !== 'undefined' ? process.env.NODE_ENV !== 'production' : true;
+
+function openExternalUrl(url: string) {
+  if (isWebRuntime && typeof window !== 'undefined') {
+    window.location.href = url;
+    return Promise.resolve(true);
+  }
+
+  return Linking.openURL(url);
+}
+
 const API_URL =
   envApiBaseUrl ??
   (isWebRuntime &&
@@ -660,7 +670,7 @@ export default function App() {
         applyApiUser(connection.user);
       }
       if (connection.authUrl) {
-        void Linking.openURL(connection.authUrl).catch(() => undefined);
+        void openExternalUrl(connection.authUrl).catch(() => undefined);
       }
 
       if (connection.mode === 'demo') {
@@ -3686,7 +3696,7 @@ function InstagramSettingsEditor({
         onApplyUser(result.user);
       }
       if (result.authUrl) {
-        void Linking.openURL(result.authUrl).catch(() => undefined);
+        void openExternalUrl(result.authUrl).catch(() => undefined);
         setImportStatus('После входа вернитесь сюда и нажмите “Обновить медиа”');
         return;
       }

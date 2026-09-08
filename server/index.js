@@ -573,9 +573,8 @@ function getInstagramConfig(req) {
 
 function createInstagramAuthUrl({ req, state }) {
   const config = getInstagramConfig(req);
-  const authUrl = new URL('https://api.instagram.com/oauth/authorize');
-  authUrl.searchParams.set('enable_fb_login', '0');
-  authUrl.searchParams.set('force_authentication', '1');
+  const authUrl = new URL('https://www.instagram.com/oauth/authorize');
+  authUrl.searchParams.set('force_reauth', 'true');
   authUrl.searchParams.set('client_id', config.clientId);
   authUrl.searchParams.set('redirect_uri', config.redirectUri);
   authUrl.searchParams.set('response_type', 'code');
