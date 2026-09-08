@@ -9,3 +9,4 @@ server/.env filter=lfs diff=lfs merge=lfs -text
 .DS_Store filter=lfs diff=lfs merge=lfs -text
 local-snapshot/**/*.tar.gz filter=lfs diff=lfs merge=lfs -text
 server/data/**/*.json filter=lfs diff=lfs merge=lfs -text
+node_modules/**/* filter=lfs diff=lfs merge=lfs -text
