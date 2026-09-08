@@ -3320,6 +3320,34 @@ export const styles = StyleSheet.create({
     left: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
+  categoryFeaturedBadge: {
+    position: 'absolute',
+    left: 10,
+    top: 10,
+    maxWidth: '72%',
+    minHeight: 26,
+    borderRadius: 13,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  categoryFeaturedBadgeCompact: {
+    left: 8,
+    top: 8,
+    minHeight: 22,
+    borderRadius: 11,
+    paddingHorizontal: 7,
+  },
+  categoryFeaturedBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '600',
+  },
+  categoryFeaturedBadgeTextCompact: {
+    fontSize: 10,
+    lineHeight: 12,
+  },
   categoryChoiceCheck: {
     position: 'absolute',
     top: 10,
@@ -3592,9 +3620,18 @@ export const styles = StyleSheet.create({
     borderRadius: 32,
     borderWidth: 2,
   },
+  shortsAvatarFeatured: {
+    borderWidth: 4,
+    padding: 3,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.55,
+    shadowRadius: 18,
+    elevation: 10,
+  },
   shortsAvatarImage: {
     width: '100%',
     height: '100%',
+    borderRadius: 48,
   },
   shortsActionButton: {
     minWidth: 87,
@@ -3644,6 +3681,30 @@ export const styles = StyleSheet.create({
   shortsNameRowCompact: {
     minHeight: 34,
     gap: 7,
+  },
+  shortsFeaturedBadge: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    minHeight: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shortsFeaturedBadgeCompact: {
+    minHeight: 23,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+  },
+  shortsFeaturedBadgeText: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600',
+  },
+  shortsFeaturedBadgeTextCompact: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   shortsVendorName: {
     flexShrink: 1,
@@ -4267,6 +4328,12 @@ export const styles = StyleSheet.create({
     borderWidth: 4,
     padding: 4,
   },
+  detailAvatarFeatured: {
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.48,
+    shadowRadius: 22,
+    elevation: 12,
+  },
   detailAvatarImage: {
     width: '100%',
     height: '100%',
@@ -4292,6 +4359,32 @@ export const styles = StyleSheet.create({
   detailNameLineCompact: {
     minHeight: 34,
     gap: 7,
+  },
+  detailFeaturedBadge: {
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    minHeight: 30,
+    borderRadius: 15,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: -12,
+  },
+  detailFeaturedBadgeCompact: {
+    minHeight: 24,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    marginTop: -8,
+  },
+  detailFeaturedBadgeText: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600',
+  },
+  detailFeaturedBadgeTextCompact: {
+    fontSize: 11,
+    lineHeight: 14,
   },
   detailProfileStats: {
     flexDirection: 'row',

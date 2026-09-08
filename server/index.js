@@ -92,6 +92,13 @@ function readDb() {
   if (!Array.isArray(db.vendors) || db.vendors.length === 0) {
     db.vendors = createSeedVendors();
   }
+  db.vendors = db.vendors.map((vendor) => {
+    const defaultFeatured = getDefaultVendorFeatured(vendor.id);
+    return {
+      ...vendor,
+      ...(vendor.featured || !defaultFeatured ? {} : { featured: defaultFeatured }),
+    };
+  });
   ensureReviewUsers(db);
   return db;
 }
@@ -252,6 +259,53 @@ function createDefaultEventDraft() {
   };
 }
 
+function getDefaultVendorFeatured(id) {
+  const featured = {
+    v1: {
+      enabled: true,
+      style: 'rose',
+      badgeText: 'Выбор SVADBA.kz',
+      priority: 80,
+    },
+    v4: {
+      enabled: true,
+      style: 'royal',
+      badgeText: 'Premium зал',
+      priority: 90,
+    },
+    v6: {
+      enabled: true,
+      style: 'gold',
+      badgeText: 'Выбор владельца',
+      priority: 100,
+    },
+    v11: {
+      enabled: true,
+      style: 'neon',
+      badgeText: 'Top host',
+      priority: 70,
+    },
+  };
+
+  return featured[id];
+}
+
+function getVendorFeaturedPriority(vendor) {
+  return vendor.featured?.enabled ? Number(vendor.featured.priority || 0) : 0;
+}
+
+function sortVendorsForClients(vendors) {
+  return [...vendors].sort((a, b) => {
+    const priorityDelta = getVendorFeaturedPriority(b) - getVendorFeaturedPriority(a);
+    if (priorityDelta !== 0) return priorityDelta;
+
+    const ratingDelta = Number(b.rating || 0) - Number(a.rating || 0);
+    if (ratingDelta !== 0) return ratingDelta;
+
+    return Number(b.reviewCount || 0) - Number(a.reviewCount || 0);
+  });
+}
+
 function createSeedVendors() {
   const videos = {
     decor: 'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
@@ -278,47 +332,52 @@ function createSeedVendors() {
     ['v10', 'Premium Auto KZ', 'Авто', 'Алматы', 4.8, 120000, 4, 118, 'Свободны 2 сентября', 24, 'car', videos.car],
   ];
 
-  return base.map(([id, name, category, city, rating, priceFrom, experience, weddings, availability, portfolioCount, imageKey, shortVideoUrl], index) => ({
-    id,
-    name,
-    category,
-    city,
-    rating,
-    priceFrom,
-    verified: true,
-    experience,
-    weddings,
-    availability,
-    portfolioCount,
-    contactPhone: `+770155501${String(index).padStart(2, '0')}`,
-    reviewCount: index === 5 ? 38 : 12 + index * 3,
-    shortVideoUrl,
-    imageKey,
-    portfolioImageKeys: [imageKey, index % 2 === 0 ? 'hall' : 'decor', index % 3 === 0 ? 'photo' : 'florist'],
-    description:
-      'Проверенный подрядчик для мероприятий: понятные условия, живые медиа, быстрый ответ и аккуратная работа с датой.',
-    packages: [
-      {
-        name: 'Базовый',
-        price: priceFrom,
-        details: 'Основная услуга, консультация и подготовка.',
-      },
-      {
-        name: 'Расширенный',
-        price: Math.round(priceFrom * 1.7),
-        details: 'Больше времени, подготовка сценария и сопровождение.',
-      },
-    ],
-    reviews: [
-      {
-        id: `${id}-review-1`,
-        author: 'Алия',
-        rating,
-        date: '12 июня',
-        text: 'Быстро ответили, держали договоренности и помогли спокойно закрыть дату.',
-      },
-    ],
-  }));
+  return base.map(([id, name, category, city, rating, priceFrom, experience, weddings, availability, portfolioCount, imageKey, shortVideoUrl], index) => {
+    const featured = getDefaultVendorFeatured(id);
+
+    return {
+      id,
+      name,
+      category,
+      city,
+      rating,
+      priceFrom,
+      verified: true,
+      ...(featured ? { featured } : {}),
+      experience,
+      weddings,
+      availability,
+      portfolioCount,
+      contactPhone: `+770155501${String(index).padStart(2, '0')}`,
+      reviewCount: index === 5 ? 38 : 12 + index * 3,
+      shortVideoUrl,
+      imageKey,
+      portfolioImageKeys: [imageKey, index % 2 === 0 ? 'hall' : 'decor', index % 3 === 0 ? 'photo' : 'florist'],
+      description:
+        'Проверенный подрядчик для мероприятий: понятные условия, живые медиа, быстрый ответ и аккуратная работа с датой.',
+      packages: [
+        {
+          name: 'Базовый',
+          price: priceFrom,
+          details: 'Основная услуга, консультация и подготовка.',
+        },
+        {
+          name: 'Расширенный',
+          price: Math.round(priceFrom * 1.7),
+          details: 'Больше времени, подготовка сценария и сопровождение.',
+        },
+      ],
+      reviews: [
+        {
+          id: `${id}-review-1`,
+          author: 'Алия',
+          rating,
+          date: '12 июня',
+          text: 'Быстро ответили, держали договоренности и помогли спокойно закрыть дату.',
+        },
+      ],
+    };
+  });
 }
 
 function hashPassword(password) {
@@ -499,7 +558,7 @@ async function handleApi(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/bootstrap') {
     sendJson(res, 200, {
       categories: db.categories,
-      vendors: db.vendors,
+      vendors: sortVendorsForClients(db.vendors),
       vendorSettings: db.vendorSettings,
       instagramMedia: db.instagramMedia,
     });
@@ -507,7 +566,7 @@ async function handleApi(req, res) {
   }
 
   if (req.method === 'GET' && url.pathname === '/api/vendors') {
-    sendJson(res, 200, { vendors: db.vendors });
+    sendJson(res, 200, { vendors: sortVendorsForClients(db.vendors) });
     return;
   }
 
@@ -705,6 +764,40 @@ async function handleApi(req, res) {
     issueSession(user);
     writeDb(db);
     sendJson(res, 200, { user: publicUser(user) });
+    return;
+  }
+
+  const adminVendorFeaturedMatch = url.pathname.match(
+    /^\/api\/admin\/vendors\/([^/]+)\/featured$/,
+  );
+  if (adminVendorFeaturedMatch && req.method === 'PATCH') {
+    const adminToken = process.env.MODERATION_ADMIN_TOKEN;
+    if (!adminToken || req.headers['x-admin-token'] !== adminToken) {
+      sendJson(res, 401, { error: 'Unauthorized' });
+      return;
+    }
+
+    const body = await readBody(req);
+    const vendor = db.vendors.find((item) => item.id === adminVendorFeaturedMatch[1]);
+    if (!vendor) {
+      sendJson(res, 404, { error: 'Vendor not found' });
+      return;
+    }
+
+    const allowedStyles = ['gold', 'neon', 'royal', 'rose'];
+    const style = allowedStyles.includes(body.style) ? body.style : 'gold';
+    vendor.featured = {
+      enabled: body.enabled !== false,
+      style,
+      badgeText: String(body.badgeText || 'Выбор SVADBA.kz').trim(),
+      priority: Number.isFinite(Number(body.priority))
+        ? Math.max(0, Math.min(999, Number(body.priority)))
+        : 50,
+      ...(body.expiresAt ? { expiresAt: String(body.expiresAt) } : {}),
+    };
+
+    writeDb(db);
+    sendJson(res, 200, { vendor });
     return;
   }
 

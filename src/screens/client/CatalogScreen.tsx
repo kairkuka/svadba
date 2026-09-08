@@ -27,6 +27,7 @@ import {
 import { getVendorImageSource } from '../../data/vendorImages';
 import { colors, styles } from '../../theme/styles';
 import type { Vendor } from '../../types';
+import { getFeaturedVisualStyle, sortFeaturedFirst } from '../../utils/featured';
 import { formatMoney } from '../../utils/format';
 
 export type CatalogSort = 'recommended' | 'rating' | 'price';
@@ -62,13 +63,14 @@ export function CatalogScreen({
   );
   const [choiceIndex, setChoiceIndex] = useState(0);
   const [likedVendorIds, setLikedVendorIds] = useState<string[]>([]);
-  const visibleVendors = useMemo(
-    () =>
+  const visibleVendors = useMemo(() => {
+    const scopedVendors =
       activeCategories.length === 0
         ? vendors
-        : vendors.filter((vendor) => activeCategories.includes(vendor.category)),
-    [activeCategories, vendors],
-  );
+        : vendors.filter((vendor) => activeCategories.includes(vendor.category));
+
+    return sortFeaturedFirst(scopedVendors);
+  }, [activeCategories, vendors]);
   const currentVendor = visibleVendors[choiceIndex] ?? null;
   const compactLayout = width <= 430;
 
@@ -216,12 +218,16 @@ function CategoryChoiceGrid({
       </View>
       <View style={styles.categoryChoiceGrid}>
         {availableCategories.map((category) => {
-          const categoryVendors = vendors.filter(
-            (vendor) =>
-              vendor.category === category && getVendorVideoUrls(vendor).length > 0,
+          const categoryVendors = sortFeaturedFirst(
+            vendors.filter(
+              (vendor) =>
+                vendor.category === category &&
+                getVendorVideoUrls(vendor).length > 0,
+            ),
           );
           const previewVendor = categoryVendors[0];
           const isSelected = selectedCategories.includes(category);
+          const featuredVisual = getFeaturedVisualStyle(previewVendor.featured);
 
           return (
             <Pressable
@@ -240,6 +246,29 @@ function CategoryChoiceGrid({
                 vendor={previewVendor}
               />
               <View style={styles.categoryChoiceShade} />
+              {previewVendor.featured?.enabled && featuredVisual ? (
+                <View
+                  style={[
+                    styles.categoryFeaturedBadge,
+                    compactLayout && styles.categoryFeaturedBadgeCompact,
+                    {
+                      backgroundColor: featuredVisual.badgeBackground,
+                      borderColor: featuredVisual.badgeBorder,
+                    },
+                  ]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[
+                      styles.categoryFeaturedBadgeText,
+                      compactLayout && styles.categoryFeaturedBadgeTextCompact,
+                      { color: featuredVisual.badgeText },
+                    ]}
+                  >
+                    {previewVendor.featured.badgeText}
+                  </Text>
+                </View>
+              ) : null}
               <View
                 style={[
                   styles.categoryChoiceCheck,
@@ -372,6 +401,7 @@ function ShortsVendorViewer({
   const topIconSize = compactLayout ? 24 : 31;
   const actionIconSize = compactLayout ? 34 : 46;
   const verifiedIconSize = compactLayout ? 25 : 36;
+  const featuredVisual = getFeaturedVisualStyle(vendor.featured);
   const swipeTranslate = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const swipeOpacity = useRef(new Animated.Value(1)).current;
   const shortsSceneAnimatedStyle = useMemo(
@@ -670,6 +700,14 @@ function ShortsVendorViewer({
             style={({ pressed }) => [
               styles.shortsAvatar,
               compactLayout && styles.shortsAvatarCompact,
+              featuredVisual && [
+                styles.shortsAvatarFeatured,
+                {
+                  backgroundColor: featuredVisual.ringInner,
+                  borderColor: featuredVisual.ringOuter,
+                  shadowColor: featuredVisual.ringOuter,
+                },
+              ],
               pressed && styles.pressed,
             ]}
           >
@@ -743,6 +781,29 @@ function ShortsVendorViewer({
                 />
             ) : null}
           </Pressable>
+          {vendor.featured?.enabled && featuredVisual ? (
+            <View
+              style={[
+                styles.shortsFeaturedBadge,
+                compactLayout && styles.shortsFeaturedBadgeCompact,
+                {
+                  backgroundColor: featuredVisual.badgeBackground,
+                  borderColor: featuredVisual.badgeBorder,
+                },
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[
+                  styles.shortsFeaturedBadgeText,
+                  compactLayout && styles.shortsFeaturedBadgeTextCompact,
+                  { color: featuredVisual.badgeText },
+                ]}
+              >
+                {vendor.featured.badgeText}
+              </Text>
+            </View>
+          ) : null}
           <Text
             numberOfLines={1}
             style={[styles.shortsMeta, compactLayout && styles.shortsMetaCompact]}

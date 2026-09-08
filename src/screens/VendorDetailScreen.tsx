@@ -28,6 +28,7 @@ import {
 } from '../data/vendorImages';
 import { colors, styles } from '../theme/styles';
 import type { Vendor } from '../types';
+import { getFeaturedVisualStyle } from '../utils/featured';
 import { formatMoney } from '../utils/format';
 
 export function VendorDetailScreen({
@@ -69,6 +70,7 @@ export function VendorDetailScreen({
   const calendarIconSize = compactLayout ? 17 : 20;
   const actionIconSize = compactLayout ? 21 : 25;
   const saveIconSize = compactLayout ? 25 : 30;
+  const featuredVisual = getFeaturedVisualStyle(vendor.featured);
   const bookingCalendar = getBookingCalendarRows(visibleBookingMonth);
   const visibleMonthTitle = getMonthTitle(visibleBookingMonth);
   const changeBookingMonth = (delta: number) => {
@@ -119,6 +121,14 @@ export function VendorDetailScreen({
             style={[
               styles.detailAvatarRing,
               compactLayout && styles.detailAvatarRingCompact,
+              featuredVisual && [
+                styles.detailAvatarFeatured,
+                {
+                  backgroundColor: featuredVisual.ringInner,
+                  borderColor: featuredVisual.ringOuter,
+                  shadowColor: featuredVisual.ringOuter,
+                },
+              ],
             ]}
           >
             <Image
@@ -162,6 +172,29 @@ export function VendorDetailScreen({
                 />
               ) : null}
             </View>
+            {vendor.featured?.enabled && featuredVisual ? (
+              <View
+                style={[
+                  styles.detailFeaturedBadge,
+                  compactLayout && styles.detailFeaturedBadgeCompact,
+                  {
+                    backgroundColor: featuredVisual.badgeBackground,
+                    borderColor: featuredVisual.badgeBorder,
+                  },
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[
+                    styles.detailFeaturedBadgeText,
+                    compactLayout && styles.detailFeaturedBadgeTextCompact,
+                    { color: featuredVisual.badgeText },
+                  ]}
+                >
+                  {vendor.featured.badgeText}
+                </Text>
+              </View>
+            ) : null}
             <View
               style={[
                 styles.detailProfileStats,

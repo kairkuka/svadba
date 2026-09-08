@@ -20,6 +20,16 @@ export type VendorImageKey =
   | 'dj'
   | 'car';
 
+export type FeaturedVendorStyle = 'gold' | 'neon' | 'royal' | 'rose';
+
+export type VendorFeatured = {
+  enabled: boolean;
+  style: FeaturedVendorStyle;
+  badgeText: string;
+  priority: number;
+  expiresAt?: string;
+};
+
 export type UserSession = {
   role: Role;
   city: string;
@@ -105,6 +115,7 @@ export type Vendor = {
   rating: number;
   priceFrom: number;
   verified: boolean;
+  featured?: VendorFeatured;
   experience: number;
   weddings: number;
   availability: string;
