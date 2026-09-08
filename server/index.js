@@ -839,7 +839,7 @@ async function handleApi(req, res) {
   if (req.method === 'GET' && url.pathname === '/api/legal') {
     const origin = getPublicOrigin(req);
     sendJson(res, 200, {
-      privacyPolicyUrl: `${origin}/privacy`,
+      privacyPolicyUrl: `${origin}/privacy-policy`,
       termsUrl: `${origin}/terms`,
       supportUrl: `${origin}/support`,
       accountDeletionUrl: `${origin}/account-deletion`,
@@ -1515,6 +1515,7 @@ const server = http.createServer((req, res) => {
   const legalPages = {
     '/account-deletion': 'account-deletion.html',
     '/privacy': 'privacy.html',
+    '/privacy-policy': 'privacy.html',
     '/support': 'support.html',
     '/terms': 'terms.html',
   };
