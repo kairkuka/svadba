@@ -111,9 +111,17 @@ type UploadedMediaItem = {
 };
 type InstagramDraftMediaItem = {
   id: string;
+  providerMediaId?: string;
   type: 'video' | 'image';
   title: string;
+  caption?: string;
   imageKey: VendorImageKey;
+  mediaUrl?: string;
+  thumbnailUrl?: string;
+  sourceUrl?: string;
+  permalink?: string;
+  timestamp?: string;
+  source?: 'instagram' | 'demo';
 };
 type InstagramImportPreviewItem = InstagramDraftMediaItem & {
   sourceUrl: string;
@@ -133,6 +141,14 @@ type ApiUser = {
   blockedVendorIds?: string[];
   savedVendorIds?: string[];
   uploadedMedia?: UploadedMediaItem[];
+  instagramConnected?: boolean;
+  instagramProfile?: {
+    username?: string;
+    accountType?: string;
+    mediaCount?: number;
+    mode?: string;
+    connectedAt?: string;
+  } | null;
 };
 
 const GUEST_CATALOG_SEEN_KEY = 'svadba_guest_catalog_seen';
@@ -174,6 +190,33 @@ const DEFAULT_EVENT_DRAFT: EventDraft = {
   place: 'Пока выбираем',
   comment: 'Нужны ведущий, декор и фото.',
 };
+
+function createUploadedMediaFromInstagramPreview(
+  item: InstagramImportPreviewItem,
+  index: number,
+  currentMediaCount: number,
+): UploadedMediaItem {
+  const type = item.type === 'video' ? 'video' : 'image';
+  const sourceUrl =
+    item.permalink || item.sourceUrl || `https://instagram.com/p/${item.id}`;
+  return {
+    id: `ig-import-${Date.now()}-${index}`,
+    uri: item.mediaUrl || item.thumbnailUrl || sourceUrl,
+    type,
+    fileName: item.title || `${type}-${item.id}`,
+    caption: item.caption || item.title,
+    imageKey: item.imageKey,
+    sourceUrl,
+    selected: true,
+    role:
+      currentMediaCount === 0 && index === 0
+        ? 'main'
+        : type === 'video'
+          ? 'reels'
+          : 'profile',
+    status: item.mediaUrl ? 'uploaded' : 'ready',
+  };
+}
 
 const clientStories = [
   {
@@ -319,6 +362,9 @@ export default function App() {
     'ig2',
   ]);
   const [instagramHandle, setInstagramHandle] = useState('@kairkuka');
+  const [instagramConnected, setInstagramConnected] = useState(false);
+  const [instagramProfile, setInstagramProfile] =
+    useState<ApiUser['instagramProfile']>(null);
   const [instagramImportStarted, setInstagramImportStarted] = useState(false);
   const [vendorImportMethod, setVendorImportMethod] =
     useState<VendorImportMethod>(null);
@@ -353,6 +399,8 @@ export default function App() {
     setVendorDraft(user.vendorDraft);
     setSelectedImportIds(user.selectedImportIds);
     setInstagramHandle(user.instagramHandle);
+    setInstagramConnected(Boolean(user.instagramConnected));
+    setInstagramProfile(user.instagramProfile ?? null);
     setEventDraft(user.eventDraft ?? DEFAULT_EVENT_DRAFT);
     setClientBookings(user.bookings ?? []);
     setSavedVendorIds(user.savedVendorIds ?? []);
@@ -598,8 +646,59 @@ export default function App() {
     setPhase('app');
   };
 
-  const finishVendorImport = () => {
+  const connectInstagramForImport = async () => {
+    setVendorImportMethod('instagram');
+    setInstagramImportStarted(true);
+
+    if (!userId) {
+      return;
+    }
+
+    try {
+      const connection = await connectInstagramAccountRemote(userId, instagramHandle);
+      if (connection.user) {
+        applyApiUser(connection.user);
+      }
+      if (connection.authUrl) {
+        void Linking.openURL(connection.authUrl).catch(() => undefined);
+      }
+
+      if (connection.mode === 'demo') {
+        const result = await fetchInstagramMediaRemote(userId, instagramHandle);
+        setApiInstagramMedia(result.items);
+        setSelectedImportIds(result.items.slice(0, 4).map((item) => item.id));
+        setInstagramConnected(true);
+        setInstagramProfile(result.profile);
+      }
+      setBackendStatus('ok');
+    } catch {
+      setBackendStatus('offline');
+      setApiInstagramMedia(instagramDraftMedia);
+      setSelectedImportIds(instagramDraftMedia.slice(0, 4).map((item) => item.id));
+    }
+  };
+
+  const finishVendorImport = async () => {
     persistSession(role, true);
+    if (vendorImportMethod === 'instagram' && selectedImportIds.length > 0) {
+      if (userId) {
+        try {
+          const result = await importInstagramMediaRemote(userId, selectedImportIds);
+          applyApiUser(result.user);
+          setBackendStatus('ok');
+        } catch {
+          const selectedItems = apiInstagramMedia.filter((item) =>
+            selectedImportIds.includes(item.id),
+          ) as InstagramImportPreviewItem[];
+          const importedItems = selectedItems.map((item, index) =>
+            createUploadedMediaFromInstagramPreview(item, index, uploadedMedia.length),
+          );
+          setUploadedMedia((current) => [...current, ...importedItems]);
+          setBackendStatus('offline');
+        }
+      }
+    }
+
     if (userId) {
       publishVendorProfile(userId, vendorDraft)
         .then((result) => {
@@ -1234,10 +1333,7 @@ export default function App() {
           <View style={styles.importMethodGrid}>
             <Pressable
               accessibilityRole="button"
-              onPress={() => {
-                setVendorImportMethod('instagram');
-                setInstagramImportStarted(true);
-              }}
+              onPress={connectInstagramForImport}
               style={({ pressed }) => [
                 styles.importMethodCard,
                 vendorImportMethod === 'instagram' && styles.importMethodCardActive,
@@ -1295,7 +1391,9 @@ export default function App() {
                 <View style={styles.instagramProfileCopy}>
                   <Text style={styles.instagramConnectedLabel}>Профиль найден</Text>
                   <Text style={styles.instagramSourceText}>
-                    instagram.com/kairkuka
+                    {instagramConnected
+                      ? `instagram.com/${instagramProfile?.username || instagramHandle.replace('@', '')}`
+                      : 'Откроется официальный вход Instagram'}
                   </Text>
                   <View style={styles.instagramHandleRow}>
                     <AtSign color="#A7B0BA" size={17} strokeWidth={2.1} />
@@ -1325,15 +1423,21 @@ export default function App() {
 
               <View style={styles.syncSummaryRow}>
                 <View style={styles.syncSummaryItem}>
-                  <Text style={styles.syncSummaryValue}>12</Text>
+                  <Text style={styles.syncSummaryValue}>
+                    {apiInstagramMedia.filter((item) => item.type === 'image').length}
+                  </Text>
                   <Text style={styles.syncSummaryLabel}>постов</Text>
                 </View>
                 <View style={styles.syncSummaryItem}>
-                  <Text style={styles.syncSummaryValue}>7</Text>
+                  <Text style={styles.syncSummaryValue}>
+                    {apiInstagramMedia.filter((item) => item.type === 'video').length}
+                  </Text>
                   <Text style={styles.syncSummaryLabel}>reels</Text>
                 </View>
                 <View style={styles.syncSummaryItem}>
-                  <Text style={styles.syncSummaryValue}>4</Text>
+                  <Text style={styles.syncSummaryValue}>
+                    {selectedImportIds.length}
+                  </Text>
                   <Text style={styles.syncSummaryLabel}>выбрано</Text>
                 </View>
               </View>
@@ -1489,6 +1593,7 @@ export default function App() {
         <VendorDashboard
           bookings={vendorRequests}
           busyDates={vendorBusyDates}
+          onApplyUser={applyApiUser}
           onChangeUploadedMedia={changeUploadedMedia}
           onChangeBusyDates={changeVendorBusyDates}
           onDeleteAccount={deleteAccount}
@@ -1500,6 +1605,7 @@ export default function App() {
           onUpdateRequestStatus={updateVendorRequestStatus}
           settings={apiVendorSettings}
           uploadedMedia={uploadedMedia}
+          userId={userId}
           vendorDraft={vendorDraft}
           vendors={apiVendors}
         />
@@ -2271,6 +2377,7 @@ function ClientSettingsPanel({
 function VendorDashboard({
   bookings,
   busyDates,
+  onApplyUser,
   onChangeBusyDates,
   onChangeUploadedMedia,
   onCloseSettings,
@@ -2282,11 +2389,13 @@ function VendorDashboard({
   settingsOpen,
   settings,
   uploadedMedia,
+  userId,
   vendorDraft,
   vendors,
 }: {
   bookings: ClientBooking[];
   busyDates: string[];
+  onApplyUser: (user: ApiUser) => void;
   onChangeBusyDates: (busyDates: string[]) => void;
   onChangeUploadedMedia: (media: UploadedMediaItem[]) => void;
   onCloseSettings: () => void;
@@ -2298,6 +2407,7 @@ function VendorDashboard({
   settingsOpen: boolean;
   settings: typeof vendorSettings;
   uploadedMedia: UploadedMediaItem[];
+  userId: string | null;
   vendorDraft: VendorDraft;
   vendors: Vendor[];
 }) {
@@ -2606,9 +2716,11 @@ function VendorDashboard({
             {activeSetting ? (
               <VendorSettingForm
                 bookings={bookings}
+                onApplyUser={onApplyUser}
                 onChangeUploadedMedia={onChangeUploadedMedia}
                 setting={activeSetting}
                 uploadedMedia={uploadedMedia}
+                userId={userId}
                 onBack={() => setActiveSetting(null)}
               />
             ) : (
@@ -3035,16 +3147,20 @@ function getClientSettingDefault(
 
 function VendorSettingForm({
   bookings,
+  onApplyUser,
   onChangeUploadedMedia,
   onBack,
   setting,
   uploadedMedia,
+  userId,
 }: {
   bookings: ClientBooking[];
+  onApplyUser: (user: ApiUser) => void;
   onChangeUploadedMedia: (media: UploadedMediaItem[]) => void;
   onBack: () => void;
   setting: (typeof vendorSettings)[number];
   uploadedMedia: UploadedMediaItem[];
+  userId: string | null;
 }) {
   const [values, setValues] = useState(() => getSettingFormDefaults(setting.label));
   const fields = getSettingFields(setting.label);
@@ -3077,25 +3193,14 @@ function VendorSettingForm({
         />
       ) : setting.label === 'Instagram' ? (
         <InstagramSettingsEditor
+          onApplyUser={onApplyUser}
           onImportToMedia={(items) => {
-            const importedItems: UploadedMediaItem[] = items.map((item, index) => ({
-              id: `ig-import-${Date.now()}-${index}`,
-              uri: item.sourceUrl,
-              type: item.type,
-              fileName: item.title,
-              imageKey: item.imageKey,
-              sourceUrl: item.sourceUrl,
-              selected: true,
-              role:
-                uploadedMedia.length === 0 && index === 0
-                  ? 'main'
-                  : item.type === 'video'
-                    ? 'reels'
-                    : 'profile',
-              status: 'ready',
-            }));
+            const importedItems: UploadedMediaItem[] = items.map((item, index) =>
+              createUploadedMediaFromInstagramPreview(item, index, uploadedMedia.length),
+            );
             onChangeUploadedMedia([...uploadedMedia, ...importedItems]);
           }}
+          userId={userId}
         />
       ) : setting.label === 'Заявки' ? (
         <RequestsSettingsEditor bookings={bookings} />
@@ -3550,9 +3655,13 @@ function RequestsSettingsEditor({ bookings }: { bookings: ClientBooking[] }) {
 }
 
 function InstagramSettingsEditor({
+  onApplyUser,
   onImportToMedia,
+  userId,
 }: {
+  onApplyUser: (user: ApiUser) => void;
   onImportToMedia: (items: InstagramImportPreviewItem[]) => void;
+  userId: string | null;
 }) {
   const [handle, setHandle] = useState('@kairkuka');
   const [links, setLinks] = useState(
@@ -3561,6 +3670,62 @@ function InstagramSettingsEditor({
   const [previewItems, setPreviewItems] = useState<InstagramImportPreviewItem[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [importStatus, setImportStatus] = useState('Готов к поиску медиа');
+  const [connectionMode, setConnectionMode] = useState<'demo' | 'oauth' | null>(null);
+
+  const connectInstagram = async () => {
+    if (!userId) {
+      setImportStatus('Сначала войдите в аккаунт поставщика');
+      return;
+    }
+
+    setImportStatus('Открываем официальный вход Instagram...');
+    try {
+      const result = await connectInstagramAccountRemote(userId, handle);
+      setConnectionMode(result.mode);
+      if (result.user) {
+        onApplyUser(result.user);
+      }
+      if (result.authUrl) {
+        void Linking.openURL(result.authUrl).catch(() => undefined);
+        setImportStatus('После входа вернитесь сюда и нажмите “Обновить медиа”');
+        return;
+      }
+
+      const mediaResult = await fetchInstagramMediaRemote(userId, handle);
+      setPreviewItems(mediaResult.items);
+      setSelectedIds(mediaResult.items.slice(0, 4).map((item) => item.id));
+      setImportStatus(`Найдено ${mediaResult.items.length} медиа`);
+    } catch {
+      setConnectionMode('demo');
+      setImportStatus('Instagram API пока недоступен, включен demo импорт');
+      const fallbackItems = instagramDraftMedia.map((item, index) => ({
+        ...item,
+        sourceUrl: `https://instagram.com/${handle.replace('@', '')}/demo-${index + 1}`,
+      }));
+      setPreviewItems(fallbackItems);
+      setSelectedIds(fallbackItems.map((item) => item.id));
+    }
+  };
+
+  const refreshInstagramMedia = async () => {
+    if (!userId) {
+      setImportStatus('Сначала войдите в аккаунт поставщика');
+      return;
+    }
+
+    setImportStatus('Обновляем медиа из Instagram...');
+    try {
+      const result = await fetchInstagramMediaRemote(userId, handle);
+      setPreviewItems(result.items);
+      setSelectedIds((current) =>
+        current.length ? current : result.items.slice(0, 4).map((item) => item.id),
+      );
+      setConnectionMode(result.profile?.mode === 'oauth' ? 'oauth' : 'demo');
+      setImportStatus(`Найдено ${result.items.length} медиа`);
+    } catch {
+      setImportStatus('Не удалось обновить, покажем demo медиа');
+    }
+  };
 
   const runImportBot = async () => {
     const urls = links
@@ -3604,9 +3769,13 @@ function InstagramSettingsEditor({
           style={styles.instagramSettingsAvatar}
         />
         <View style={styles.instagramSettingsAccountCopy}>
-          <Text style={styles.instagramSettingsAccountTitle}>{handle}</Text>
+        <Text style={styles.instagramSettingsAccountTitle}>{handle}</Text>
           <Text style={styles.instagramSettingsAccountMeta}>
-            Ручной бот импорта · API подключим позже
+            {connectionMode === 'oauth'
+              ? 'Официальный Instagram подключен'
+              : connectionMode === 'demo'
+                ? 'Demo импорт до получения API ключей'
+                : 'Готов к официальному подключению'}
           </Text>
         </View>
         <View style={styles.oauthBadge}>
@@ -3631,14 +3800,25 @@ function InstagramSettingsEditor({
         />
         <Pressable
           accessibilityRole="button"
-          onPress={runImportBot}
+          onPress={connectInstagram}
           style={({ pressed }) => [
             styles.instagramImportButton,
             pressed && styles.pressed,
           ]}
         >
           <Camera color={colors.surface} size={20} strokeWidth={2.2} />
-          <Text style={styles.instagramImportButtonText}>Запустить бота</Text>
+          <Text style={styles.instagramImportButtonText}>Подключить Instagram</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={refreshInstagramMedia}
+          style={({ pressed }) => [
+            styles.manualUploadButton,
+            pressed && styles.pressed,
+          ]}
+        >
+          <Upload color={colors.surface} size={20} strokeWidth={2.2} />
+          <Text style={styles.instagramImportButtonText}>Обновить медиа</Text>
         </Pressable>
         <Text style={styles.instagramBotStatus}>{importStatus}</Text>
       </View>
@@ -3715,7 +3895,17 @@ function InstagramSettingsEditor({
       <Pressable
         accessibilityRole="button"
         disabled={selectedItems.length === 0}
-        onPress={() => {
+        onPress={async () => {
+          if (userId) {
+            try {
+              const result = await importInstagramMediaRemote(userId, selectedItems.map((item) => item.id));
+              onApplyUser(result.user);
+              setImportStatus(`${result.importedCount} медиа перенесено в профиль`);
+              return;
+            } catch {
+              setImportStatus('Backend offline, перенесено локально');
+            }
+          }
           onImportToMedia(selectedItems);
           setImportStatus(`${selectedItems.length} медиа перенесено в профиль`);
         }}
@@ -4585,6 +4775,44 @@ async function requestInstagramImportPreview(handle: string, urls: string[]) {
   }>('/instagram/import-preview', {
     method: 'POST',
     body: { handle, urls },
+  });
+}
+
+async function connectInstagramAccountRemote(
+  userId: string,
+  handle: string,
+  demo = false,
+) {
+  return apiRequest<{
+    mode: 'oauth' | 'demo';
+    authUrl: string | null;
+    message: string;
+    user?: ApiUser;
+  }>(`/users/${userId}/instagram/connect`, {
+    method: 'POST',
+    body: { handle, demo },
+  });
+}
+
+async function fetchInstagramMediaRemote(userId: string, handle: string) {
+  return apiRequest<{
+    status: string;
+    profile: NonNullable<ApiUser['instagramProfile']>;
+    items: InstagramImportPreviewItem[];
+  }>(`/users/${userId}/instagram/media`, {
+    method: 'POST',
+    body: { handle },
+  });
+}
+
+async function importInstagramMediaRemote(userId: string, itemIds: string[]) {
+  return apiRequest<{
+    user: ApiUser;
+    importedMedia: UploadedMediaItem[];
+    importedCount: number;
+  }>(`/users/${userId}/instagram/import`, {
+    method: 'POST',
+    body: { itemIds },
   });
 }
 

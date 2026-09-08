@@ -19,6 +19,8 @@ const initialDb = {
   bookings: [],
   accountDeletionRequests: [],
   contentReports: [],
+  instagramConnections: {},
+  instagramOAuthStates: {},
   vendorCalendars: {},
   categories: [
     'Ведущие',
@@ -77,6 +79,12 @@ function readDb() {
   if (!Array.isArray(db.bookings)) db.bookings = [];
   if (!Array.isArray(db.accountDeletionRequests)) db.accountDeletionRequests = [];
   if (!Array.isArray(db.contentReports)) db.contentReports = [];
+  if (!db.instagramConnections || typeof db.instagramConnections !== 'object') {
+    db.instagramConnections = {};
+  }
+  if (!db.instagramOAuthStates || typeof db.instagramOAuthStates !== 'object') {
+    db.instagramOAuthStates = {};
+  }
   if (!db.vendorCalendars || typeof db.vendorCalendars !== 'object') {
     db.vendorCalendars = {};
   }
@@ -200,8 +208,19 @@ function readBody(req) {
   });
 }
 
+function readInstagramConnectionForPublic(userId) {
+  try {
+    if (!fs.existsSync(DB_PATH)) return null;
+    const db = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+    return db.instagramConnections?.[userId] || null;
+  } catch {
+    return null;
+  }
+}
+
 function publicUser(user) {
   if (!user) return null;
+  const instagramConnection = readInstagramConnectionForPublic(user.id);
   return {
     id: user.id,
     email: user.email,
@@ -212,6 +231,16 @@ function publicUser(user) {
     vendorDraft: user.vendorDraft,
     selectedImportIds: user.selectedImportIds,
     instagramHandle: user.instagramHandle,
+    instagramConnected: Boolean(instagramConnection),
+    instagramProfile: instagramConnection
+      ? {
+          username: instagramConnection.username,
+          accountType: instagramConnection.accountType,
+          mediaCount: instagramConnection.mediaCount,
+          mode: instagramConnection.mode,
+          connectedAt: instagramConnection.connectedAt,
+        }
+      : null,
     eventDraft: user.eventDraft || createDefaultEventDraft(),
     bookings: user.bookings || [],
     blockedVendorIds: user.blockedVendorIds || [],
@@ -517,6 +546,191 @@ function createBaseUser(email, role, passwordHash) {
   };
 }
 
+function normalizeInstagramHandle(handle) {
+  return String(handle || '@kairkuka').trim().replace(/^@/, '') || 'kairkuka';
+}
+
+function getInstagramRedirectUri(req) {
+  return (
+    process.env.INSTAGRAM_REDIRECT_URI ||
+    `${process.env.PUBLIC_BASE_URL || getPublicOrigin(req)}/api/instagram/callback`
+  );
+}
+
+function getInstagramConfig(req) {
+  const clientId = process.env.INSTAGRAM_CLIENT_ID;
+  const clientSecret = process.env.INSTAGRAM_CLIENT_SECRET;
+  return {
+    clientId,
+    clientSecret,
+    enabled: Boolean(clientId && clientSecret),
+    redirectUri: getInstagramRedirectUri(req),
+    scope:
+      process.env.INSTAGRAM_SCOPE ||
+      'instagram_business_basic,instagram_business_manage_insights',
+  };
+}
+
+function createInstagramAuthUrl({ req, state }) {
+  const config = getInstagramConfig(req);
+  const authUrl = new URL('https://api.instagram.com/oauth/authorize');
+  authUrl.searchParams.set('enable_fb_login', '0');
+  authUrl.searchParams.set('force_authentication', '1');
+  authUrl.searchParams.set('client_id', config.clientId);
+  authUrl.searchParams.set('redirect_uri', config.redirectUri);
+  authUrl.searchParams.set('response_type', 'code');
+  authUrl.searchParams.set('scope', config.scope);
+  authUrl.searchParams.set('state', state);
+  return authUrl.toString();
+}
+
+function buildDemoInstagramMedia(handle, mediaSeed = initialDb.instagramMedia) {
+  const cleanHandle = normalizeInstagramHandle(handle);
+  const extra = [
+    { id: 'ig5', type: 'video', title: 'Reels: живой фрагмент', imageKey: 'host' },
+    { id: 'ig6', type: 'image', title: 'Фото с мероприятия', imageKey: 'hall' },
+    { id: 'ig7', type: 'video', title: 'Backstage подготовки', imageKey: 'dj' },
+    { id: 'ig8', type: 'image', title: 'Команда и детали', imageKey: 'decor' },
+  ];
+  return [...mediaSeed, ...extra].map((item, index) => ({
+    ...item,
+    id: `${cleanHandle}_${item.id}`,
+    providerMediaId: `${cleanHandle}_${item.id}`,
+    caption: `${item.title}. Импортировано из Instagram @${cleanHandle}.`,
+    mediaUrl: '',
+    thumbnailUrl: '',
+    sourceUrl: `https://www.instagram.com/${cleanHandle}/demo-${index + 1}`,
+    permalink: `https://www.instagram.com/${cleanHandle}/demo-${index + 1}`,
+    timestamp: new Date(Date.now() - index * 86400000).toISOString(),
+    source: 'demo',
+  }));
+}
+
+function pickInstagramImageKey(index, mediaType) {
+  const imageKeys = mediaType === 'video'
+    ? ['host', 'dj', 'film', 'band']
+    : ['decor', 'photo', 'hall', 'florist'];
+  return imageKeys[index % imageKeys.length];
+}
+
+function normalizeInstagramMediaItem(item, index, handle) {
+  const mediaType = String(item.media_type || item.type || '').toUpperCase();
+  const type = mediaType === 'VIDEO' || mediaType === 'REELS' ? 'video' : 'image';
+  const caption = String(item.caption || item.title || '').trim();
+  const title =
+    caption.split(/\r?\n/)[0]?.slice(0, 70) ||
+    (type === 'video' ? 'Instagram Reels' : 'Instagram post');
+  const sourceUrl =
+    item.permalink ||
+    item.sourceUrl ||
+    `https://www.instagram.com/${normalizeInstagramHandle(handle)}/media-${index + 1}`;
+
+  return {
+    id: String(item.id || item.providerMediaId || `ig_${Date.now()}_${index}`),
+    providerMediaId: String(item.id || item.providerMediaId || `ig_${index}`),
+    type,
+    title,
+    caption,
+    imageKey: item.imageKey || pickInstagramImageKey(index, type),
+    mediaUrl: item.media_url || item.mediaUrl || '',
+    thumbnailUrl: item.thumbnail_url || item.thumbnailUrl || item.media_url || '',
+    sourceUrl,
+    permalink: sourceUrl,
+    timestamp: item.timestamp || new Date().toISOString(),
+    source: item.source || 'instagram',
+  };
+}
+
+async function exchangeInstagramCode({ code, req }) {
+  const config = getInstagramConfig(req);
+  const body = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: 'authorization_code',
+    redirect_uri: config.redirectUri,
+    code,
+  });
+  const tokenResponse = await fetch('https://api.instagram.com/oauth/access_token', {
+    method: 'POST',
+    body,
+  });
+
+  if (!tokenResponse.ok) {
+    throw new Error(`Instagram token ${tokenResponse.status}: ${await tokenResponse.text()}`);
+  }
+
+  const shortToken = await tokenResponse.json();
+  let accessToken = shortToken.access_token;
+  let expiresIn = null;
+
+  const longTokenUrl = new URL('https://graph.instagram.com/access_token');
+  longTokenUrl.searchParams.set('grant_type', 'ig_exchange_token');
+  longTokenUrl.searchParams.set('client_secret', config.clientSecret);
+  longTokenUrl.searchParams.set('access_token', accessToken);
+  const longTokenResponse = await fetch(longTokenUrl);
+  if (longTokenResponse.ok) {
+    const longToken = await longTokenResponse.json();
+    accessToken = longToken.access_token || accessToken;
+    expiresIn = longToken.expires_in || null;
+  }
+
+  return {
+    accessToken,
+    expiresIn,
+    instagramUserId: String(shortToken.user_id || ''),
+  };
+}
+
+async function fetchInstagramProfile(accessToken) {
+  const profileUrl = new URL('https://graph.instagram.com/me');
+  profileUrl.searchParams.set('fields', 'id,username,account_type,media_count');
+  profileUrl.searchParams.set('access_token', accessToken);
+  const response = await fetch(profileUrl);
+  if (!response.ok) {
+    throw new Error(`Instagram profile ${response.status}: ${await response.text()}`);
+  }
+  return response.json();
+}
+
+async function fetchInstagramMedia(accessToken, handle) {
+  const mediaUrl = new URL('https://graph.instagram.com/me/media');
+  mediaUrl.searchParams.set(
+    'fields',
+    'id,caption,media_type,media_url,thumbnail_url,permalink,timestamp',
+  );
+  mediaUrl.searchParams.set('limit', '50');
+  mediaUrl.searchParams.set('access_token', accessToken);
+  const response = await fetch(mediaUrl);
+  if (!response.ok) {
+    throw new Error(`Instagram media ${response.status}: ${await response.text()}`);
+  }
+  const payload = await response.json();
+  return (payload.data || []).map((item, index) =>
+    normalizeInstagramMediaItem(item, index, handle),
+  );
+}
+
+function createUploadedMediaFromInstagram(item, index, currentMediaCount) {
+  const type = item.type === 'video' ? 'video' : 'image';
+  return {
+    id: `instagram_${Date.now()}_${index}`,
+    uri: item.mediaUrl || item.thumbnailUrl || item.sourceUrl,
+    type,
+    fileName: `${type}-${item.providerMediaId || item.id}`,
+    caption: item.caption || item.title,
+    imageKey: item.imageKey,
+    sourceUrl: item.permalink || item.sourceUrl,
+    selected: true,
+    role:
+      currentMediaCount === 0 && index === 0
+        ? 'main'
+        : type === 'video'
+          ? 'reels'
+          : 'profile',
+    status: item.mediaUrl ? 'uploaded' : 'ready',
+  };
+}
+
 function ensureReviewUsers(db) {
   const reviewUsers = [
     ['test-auth-1785128770383@svadba.kz', 'vendor'],
@@ -552,6 +766,58 @@ async function handleApi(req, res) {
 
   if (req.method === 'GET' && url.pathname === '/health') {
     sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/instagram/callback') {
+    const code = String(url.searchParams.get('code') || '');
+    const state = String(url.searchParams.get('state') || '');
+    const stateRecord = db.instagramOAuthStates?.[state];
+
+    if (!code || !stateRecord) {
+      res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end('<h1>Instagram не подключен</h1><p>Нет кода или сессия устарела.</p>');
+      return;
+    }
+
+    try {
+      const token = await exchangeInstagramCode({ code, req });
+      const profile = await fetchInstagramProfile(token.accessToken);
+      const user = db.users.find((item) => item.id === stateRecord.userId);
+
+      if (!user) {
+        sendJson(res, 404, { error: 'User not found' });
+        return;
+      }
+
+      db.instagramConnections[user.id] = {
+        mode: 'oauth',
+        accessToken: token.accessToken,
+        expiresIn: token.expiresIn,
+        instagramUserId: String(profile.id || token.instagramUserId || ''),
+        username: profile.username || stateRecord.handle || 'instagram',
+        accountType: profile.account_type || 'UNKNOWN',
+        mediaCount: profile.media_count || 0,
+        connectedAt: new Date().toISOString(),
+        cachedMedia: [],
+      };
+      user.instagramHandle = `@${db.instagramConnections[user.id].username}`;
+      delete db.instagramOAuthStates[state];
+      writeDb(db);
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`
+        <html>
+          <body style="background:#0A1114;color:#fff;font-family:Arial,sans-serif;padding:32px">
+            <h1>Instagram подключен</h1>
+            <p>Можно вернуться в SVADBA.kz и нажать “Обновить медиа”.</p>
+          </body>
+        </html>
+      `);
+    } catch (error) {
+      res.writeHead(502, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<h1>Ошибка Instagram</h1><p>${String(error.message || error)}</p>`);
+    }
     return;
   }
 
@@ -598,6 +864,143 @@ async function handleApi(req, res) {
     db.accountDeletionRequests.unshift(request);
     writeDb(db);
     sendJson(res, 200, { ok: true, request });
+    return;
+  }
+
+  const userInstagramConnectMatch = url.pathname.match(
+    /^\/api\/users\/([^/]+)\/instagram\/connect$/,
+  );
+  if (userInstagramConnectMatch && req.method === 'POST') {
+    const body = await readBody(req);
+    const user = requireUser(req, res, db, userInstagramConnectMatch[1]);
+    if (!user) return;
+
+    const handle = normalizeInstagramHandle(body.handle || user.instagramHandle);
+    const config = getInstagramConfig(req);
+    if (!config.enabled || body.demo === true) {
+      const demoMedia = buildDemoInstagramMedia(handle, db.instagramMedia);
+      db.instagramConnections[user.id] = {
+        mode: 'demo',
+        username: handle,
+        accountType: 'BUSINESS',
+        mediaCount: demoMedia.length,
+        connectedAt: new Date().toISOString(),
+        cachedMedia: demoMedia,
+      };
+      user.instagramHandle = `@${handle}`;
+      writeDb(db);
+      sendJson(res, 200, {
+        mode: 'demo',
+        authUrl: null,
+        message: 'Instagram demo подключен. Добавьте INSTAGRAM_CLIENT_ID/SECRET для OAuth.',
+        user: publicUser(user),
+      });
+      return;
+    }
+
+    const state = `ig_${Date.now()}_${crypto.randomBytes(12).toString('hex')}`;
+    db.instagramOAuthStates[state] = {
+      userId: user.id,
+      handle,
+      createdAt: new Date().toISOString(),
+    };
+    writeDb(db);
+    sendJson(res, 200, {
+      mode: 'oauth',
+      authUrl: createInstagramAuthUrl({ req, state }),
+      message: 'Откройте Instagram Login и подтвердите доступ.',
+    });
+    return;
+  }
+
+  const userInstagramMediaMatch = url.pathname.match(
+    /^\/api\/users\/([^/]+)\/instagram\/media$/,
+  );
+  if (userInstagramMediaMatch && (req.method === 'GET' || req.method === 'POST')) {
+    const body = req.method === 'POST' ? await readBody(req) : {};
+    const user = requireUser(req, res, db, userInstagramMediaMatch[1]);
+    if (!user) return;
+
+    const handle = normalizeInstagramHandle(body.handle || user.instagramHandle);
+    let connection = db.instagramConnections[user.id];
+    if (!connection) {
+      const demoMedia = buildDemoInstagramMedia(handle, db.instagramMedia);
+      connection = {
+        mode: 'demo',
+        username: handle,
+        accountType: 'BUSINESS',
+        mediaCount: demoMedia.length,
+        connectedAt: new Date().toISOString(),
+        cachedMedia: demoMedia,
+      };
+      db.instagramConnections[user.id] = connection;
+      user.instagramHandle = `@${handle}`;
+    }
+
+    let items = connection.cachedMedia || [];
+    let status = connection.mode || 'demo';
+    if (connection.mode === 'oauth' && connection.accessToken) {
+      try {
+        items = await fetchInstagramMedia(connection.accessToken, connection.username || handle);
+        connection.cachedMedia = items;
+        connection.mediaCount = items.length;
+        connection.lastSyncedAt = new Date().toISOString();
+      } catch (error) {
+        status = 'oauth_error_demo_fallback';
+        items = items.length ? items : buildDemoInstagramMedia(handle, db.instagramMedia);
+        connection.cachedMedia = items;
+        connection.lastError = String(error.message || error);
+      }
+    }
+
+    writeDb(db);
+    sendJson(res, 200, {
+      status,
+      profile: {
+        username: connection.username || handle,
+        accountType: connection.accountType || 'BUSINESS',
+        mediaCount: connection.mediaCount || items.length,
+        mode: connection.mode || 'demo',
+      },
+      items,
+    });
+    return;
+  }
+
+  const userInstagramImportMatch = url.pathname.match(
+    /^\/api\/users\/([^/]+)\/instagram\/import$/,
+  );
+  if (userInstagramImportMatch && req.method === 'POST') {
+    const body = await readBody(req);
+    const user = requireUser(req, res, db, userInstagramImportMatch[1]);
+    if (!user) return;
+
+    const connection = db.instagramConnections[user.id];
+    const cachedMedia = connection?.cachedMedia || buildDemoInstagramMedia(user.instagramHandle, db.instagramMedia);
+    const requestedIds = Array.isArray(body.itemIds)
+      ? body.itemIds.map((item) => String(item))
+      : [];
+    const selectedItems = cachedMedia.filter(
+      (item) => requestedIds.includes(String(item.id)) || requestedIds.includes(String(item.providerMediaId)),
+    );
+    const itemsToImport = selectedItems.length ? selectedItems : cachedMedia.slice(0, 4);
+    const existingMedia = user.uploadedMedia || [];
+    const existingSources = new Set(existingMedia.map((item) => item.sourceUrl || item.uri));
+    const importedMedia = itemsToImport
+      .map((item, index) =>
+        createUploadedMediaFromInstagram(item, index, existingMedia.length),
+      )
+      .filter((item) => !existingSources.has(item.sourceUrl || item.uri));
+
+    user.uploadedMedia = [...existingMedia, ...importedMedia];
+    user.selectedImportIds = itemsToImport.map((item) => String(item.id));
+    user.instagramHandle = `@${normalizeInstagramHandle(connection?.username || user.instagramHandle)}`;
+    writeDb(db);
+    sendJson(res, 200, {
+      user: publicUser(user),
+      importedMedia,
+      importedCount: importedMedia.length,
+    });
     return;
   }
 
