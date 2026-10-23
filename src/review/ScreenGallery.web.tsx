@@ -44,7 +44,43 @@ type Device = {
 };
 
 const devices: Device[] = [
-  { id: 'iphone', label: 'iPhone', detail: '390 × 844', width: 390, height: 844 },
+  {
+    id: 'iphone-390',
+    label: 'iPhone 14 / 16e / 17e',
+    detail: '390 × 844',
+    width: 390,
+    height: 844,
+  },
+  {
+    id: 'iphone-393',
+    label: 'iPhone 14 Pro / 15 / 15 Pro / 16',
+    detail: '393 × 852',
+    width: 393,
+    height: 852,
+  },
+  {
+    id: 'iphone-402',
+    label: 'iPhone 16 Pro / 17 / 17 Pro / 18 Pro',
+    detail: '402 × 874',
+    width: 402,
+    height: 874,
+  },
+  { id: 'iphone-air', label: 'iPhone Air', detail: '420 × 912', width: 420, height: 912 },
+  { id: 'iphone-428', label: 'iPhone 14 Plus', detail: '428 × 926', width: 428, height: 926 },
+  {
+    id: 'iphone-430',
+    label: 'iPhone 14 Pro Max / 15 Plus / 15 Pro Max / 16 Plus',
+    detail: '430 × 932',
+    width: 430,
+    height: 932,
+  },
+  {
+    id: 'iphone-440',
+    label: 'iPhone 16 Pro Max / 17 Pro Max / 18 Pro Max',
+    detail: '440 × 956',
+    width: 440,
+    height: 956,
+  },
   { id: 'android', label: 'Android', detail: '412 × 915', width: 412, height: 915 },
   { id: 'compact', label: 'Compact', detail: '360 × 800', width: 360, height: 800 },
 ];
@@ -66,7 +102,7 @@ export function ScreenGallery() {
   const [selectedId, setSelectedId] = useState(initialId);
   const [group, setGroup] = useState<ReviewScreenGroup | 'All'>('All');
   const [query, setQuery] = useState('');
-  const [deviceId, setDeviceId] = useState('iphone');
+  const [deviceId, setDeviceId] = useState('iphone-390');
   const [mode, setMode] = useState<'journey' | 'atlas' | 'map'>('journey');
   const [journeyId, setJourneyId] = useState<'client' | 'vendor'>(() =>
     getInitialJourneyId(),
@@ -544,23 +580,21 @@ function FocusView({
         </div>
 
         <div className="screen-atlas-inspector-actions" style={styles.inspectorActions}>
-          <div style={styles.deviceSwitch} aria-label="Preview device">
-            {devices.map((item) => (
-              <button
-                key={item.id}
-                aria-pressed={device.id === item.id}
-                onClick={() => onDeviceChange(item.id)}
-                style={{
-                  ...styles.deviceButton,
-                  ...(device.id === item.id ? styles.deviceButtonActive : {}),
-                }}
-                title={item.detail}
-                type="button"
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+          <label style={styles.devicePicker}>
+            <span style={styles.devicePickerLabel}>Устройство</span>
+            <select
+              aria-label="Preview device"
+              onChange={(event) => onDeviceChange(event.target.value)}
+              style={styles.deviceSelect}
+              value={device.id}
+            >
+              {devices.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label} · {item.detail}
+                </option>
+              ))}
+            </select>
+          </label>
           <button onClick={onRefresh} style={styles.secondaryButton} type="button">
             Обновить
           </button>
@@ -602,7 +636,7 @@ function FocusView({
         </div>
         <div style={styles.deviceLabel}>
           <span>{device.label}</span>
-          <span>{device.detail}</span>
+          <span>{device.detail} CSS px</span>
         </div>
         <div className="screen-atlas-phone" style={{ ...styles.phoneFrame, width: device.width + 20 }}>
           <iframe
@@ -1330,18 +1364,19 @@ const styles: Record<string, CSSProperties> = {
     fontSize: 11,
   },
   inspectorActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8 },
-  deviceSwitch: { display: 'flex', padding: 3, border: '1px solid #262626', borderRadius: 10, background: '#212328' },
-  deviceButton: {
-    minHeight: 34,
-    padding: '0 10px',
-    border: 0,
-    borderRadius: 7,
-    background: 'transparent',
-    color: '#A8A8A8',
+  devicePicker: { minWidth: 240, display: 'grid', gap: 4 },
+  devicePickerLabel: { color: '#A8A8A8', fontSize: 10 },
+  deviceSelect: {
+    width: '100%',
+    minHeight: 40,
+    padding: '0 34px 0 11px',
+    border: '1px solid #555555',
+    borderRadius: 10,
+    background: '#212328',
+    color: '#fff',
     cursor: 'pointer',
     fontSize: 11,
   },
-  deviceButtonActive: { background: '#25292E', color: '#fff' },
   secondaryButton: {
     minHeight: 40,
     padding: '0 13px',
