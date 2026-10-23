@@ -71,12 +71,12 @@ import {
   type ImageSourcePropType,
   Alert,
   Linking,
+  KeyboardAvoidingView,
   Modal,
   PanResponder,
   Platform,
   Pressable,
   SafeAreaView,
-  ScrollView,
   Text,
   TextInput,
   View,
@@ -87,6 +87,7 @@ import {
   CatalogScreen,
 } from './src/screens/client/CatalogScreen';
 import { VendorDetailScreen } from './src/screens/VendorDetailScreen';
+import { KeyboardSafeScrollView as ScrollView } from './src/components/KeyboardSafeScrollView';
 import {
   categories as mockCategories,
   vendors as mockVendors,
@@ -705,76 +706,76 @@ function getUploadedMediaImageSource(
 
 const clientStories = [
   {
-    title: 'Выберите событие',
-    text: 'Отметьте формат мероприятия и нужные направления.',
+    title: 'Начните с вашего события',
+    text: 'Выберите формат мероприятия и нужные услуги.',
     image: require('./assets/onboarding/client/1.png'),
   },
   {
-    title: 'Смотрите ленту',
-    text: 'Подрядчики показываются живыми видео, как рилсы.',
+    title: 'Находите подрядчиков в ленте',
+    text: 'Смотрите реальные фото и видео их работы.',
     image: require('./assets/onboarding/client/2.png'),
   },
   {
-    title: 'Открывайте профиль',
-    text: 'Смотрите медиа, отзывы, цену и свободные даты.',
+    title: 'Сравнивайте профили',
+    text: 'Портфолио, цены, отзывы и свободные даты собраны вместе.',
     image: require('./assets/onboarding/client/3.png'),
   },
   {
     title: 'Сохраняйте лучших',
-    text: 'Добавляйте понравившихся подрядчиков в избранное.',
+    text: 'Соберите понравившихся подрядчиков в одном списке.',
     image: require('./assets/onboarding/client/4.png'),
   },
   {
-    title: 'Свяжитесь напрямую',
-    text: 'Переходите в WhatsApp и обсуждайте детали.',
+    title: 'Обсуждайте напрямую',
+    text: 'Свяжитесь с подрядчиком и уточните детали события.',
     image: require('./assets/onboarding/client/5.png'),
   },
   {
     title: 'Бронируйте дату',
-    text: 'Выберите день в календаре и отправьте заявку.',
+    text: 'Выберите свободный день и отправьте заявку.',
     image: require('./assets/onboarding/client/6.png'),
   },
   {
-    title: 'Соберите событие',
-    text: 'Брони, бюджет, избранное и детали будут в одном месте.',
+    title: 'Всё событие под контролем',
+    text: 'Следите за бюджетом, бронями и подготовкой в одном месте.',
     image: require('./assets/onboarding/client/7.png'),
   },
 ];
 
 const vendorStories = [
   {
-    title: 'Создайте профиль',
-    text: 'Укажите название, город, категорию, цену и WhatsApp.',
+    title: 'Создайте сильный профиль',
+    text: 'Расскажите о себе, услугах, городе и ценах.',
     image: require('./assets/onboarding/vendor/1.png'),
   },
   {
-    title: 'Добавьте медиа',
-    text: 'Загрузите фото и видео вручную или через импорт.',
+    title: 'Покажите лучшие работы',
+    text: 'Добавьте фотографии и видео своего портфолио.',
     image: require('./assets/onboarding/vendor/2.png'),
   },
   {
     title: 'Выберите главное',
-    text: 'Главное видео попадет в ленту, обложка — в профиль.',
+    text: 'Назначьте обложку профиля и основное видео для ленты.',
     image: require('./assets/onboarding/vendor/3.png'),
   },
   {
-    title: 'Покажите даты',
+    title: 'Управляйте датами',
     text: 'Отмечайте свободные и занятые дни в календаре.',
     image: require('./assets/onboarding/vendor/4.png'),
   },
   {
     title: 'Получайте заявки',
-    text: 'Клиенты выбирают дату и отправляют запрос на бронь.',
+    text: 'Клиенты отправляют дату, формат события и запрос на бронь.',
     image: require('./assets/onboarding/vendor/5.png'),
   },
   {
-    title: 'Смотрите статистику',
-    text: 'Просмотры, сохранения и клики помогают понимать спрос.',
+    title: 'Следите за результатом',
+    text: 'Просмотры, сохранения и обращения показывают интерес клиентов.',
     image: require('./assets/onboarding/vendor/6.png'),
   },
   {
-    title: 'Управляйте кабинетом',
-    text: 'Медиа, цены, документы и уведомления доступны в настройках.',
+    title: 'Вся работа в одном кабинете',
+    text: 'Управляйте медиа, ценами, документами и уведомлениями.',
     image: require('./assets/onboarding/vendor/7.png'),
   },
 ];
@@ -971,7 +972,13 @@ function App(): ReactElement {
   }
 
   return (
-    <ProductApp reviewScreen={reviewRoute?.kind === 'screen' ? reviewRoute.screen : undefined} />
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      enabled={Platform.OS !== 'web'}
+      style={{ flex: 1 }}
+    >
+      <ProductApp reviewScreen={reviewRoute?.kind === 'screen' ? reviewRoute.screen : undefined} />
+    </KeyboardAvoidingView>
   );
 }
 
@@ -3259,6 +3266,10 @@ function ProductApp({ reviewScreen }: { reviewScreen?: ReviewScreen }): ReactEle
                 source={story.image}
                 style={styles.storyImage}
               />
+            </View>
+            <View pointerEvents="none" style={styles.storyCopy}>
+              <Text style={styles.storyTitle}>{story.title}</Text>
+              <Text style={styles.storyText}>{story.text}</Text>
             </View>
           </Animated.View>
           <View style={styles.storyRoundNavRow}>

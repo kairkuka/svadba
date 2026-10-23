@@ -2827,8 +2827,30 @@ const baseStyles = StyleSheet.create({
   },
   storyImage: {
     width: '100%',
-    maxHeight: '100%',
-    aspectRatio: 941 / 1672,
+    height: '100%',
+  },
+  storyCopy: {
+    position: 'absolute',
+    left: 26,
+    right: 26,
+    bottom: 116,
+    gap: 10,
+  },
+  storyTitle: {
+    maxWidth: 340,
+    color: colors.surface,
+    fontSize: 28,
+    lineHeight: 33,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  storyText: {
+    maxWidth: 340,
+    color: 'rgba(255, 255, 255, 0.78)',
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '500',
+    letterSpacing: 0,
   },
   storyRoundNavRow: {
     position: 'absolute',
