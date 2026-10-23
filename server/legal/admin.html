@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SVADBA.kz admin</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #071013;
+        --surface: #161a21;
+        --surface-2: #20252d;
+        --text: #f5f7fb;
+        --muted: #aab1bd;
+        --line: #343b46;
+        --action: #4a5df9;
+        --danger: #ff5d6c;
+        --ok: #5ed33f;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 15px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      main {
+        width: min(1180px, 100%);
+        margin: 0 auto;
+        padding: 24px;
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 28px; }
+      h2 { font-size: 19px; margin-bottom: 12px; }
+      h3 { font-size: 16px; }
+      .top {
+        display: flex;
+        gap: 12px;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+      .token {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        width: min(620px, 100%);
+      }
+      input, select, textarea {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0c1216;
+        color: var(--text);
+        min-height: 42px;
+        padding: 10px 12px;
+        font: inherit;
+      }
+      textarea {
+        width: 100%;
+        min-height: 76px;
+        resize: vertical;
+      }
+      .token input { flex: 1 1 280px; }
+      button {
+        border: 0;
+        border-radius: 8px;
+        background: var(--action);
+        color: #fff;
+        min-height: 42px;
+        padding: 0 14px;
+        font: inherit;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: var(--surface-2);
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      button.danger { background: var(--danger); }
+      .grid {
+        display: grid;
+        gap: 14px;
+      }
+      .stats {
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        margin-bottom: 16px;
+      }
+      .stat, .panel, .item {
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--surface);
+      }
+      .stat { padding: 14px; }
+      .stat strong {
+        display: block;
+        font-size: 24px;
+      }
+      .stat span { color: var(--muted); }
+      .panels {
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      }
+      .panel { padding: 16px; }
+      .list {
+        display: grid;
+        gap: 10px;
+      }
+      .item {
+        padding: 12px;
+        display: grid;
+        gap: 10px;
+      }
+      .meta, .small {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .pill {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 3px 8px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .pill.ok { color: var(--ok); border-color: rgba(94, 211, 63, .45); }
+      .pill.danger { color: var(--danger); border-color: rgba(255, 93, 108, .45); }
+      .error {
+        color: var(--danger);
+        margin: 12px 0;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="top">
+        <div>
+          <h1>SVADBA.kz admin</h1>
+          <p class="meta">Жалобы, deletion requests, скрытие поставщиков и удаление медиа.</p>
+        </div>
+        <div class="token">
+          <input id="token" placeholder="MODERATION_ADMIN_TOKEN" />
+          <button id="saveToken">Открыть</button>
+          <button class="secondary" id="refresh">Обновить</button>
+        </div>
+      </div>
+      <div id="error" class="error"></div>
+      <section id="stats" class="grid stats"></section>
+      <section class="grid panels">
+        <div class="panel">
+          <h2>Жалобы</h2>
+          <div id="reports" class="list"></div>
+        </div>
+        <div class="panel">
+          <h2>Удаление аккаунтов</h2>
+          <div id="deletions" class="list"></div>
+        </div>
+        <div class="panel">
+          <h2>Поставщики</h2>
+          <div id="vendors" class="list"></div>
+        </div>
+      </section>
+    </main>
+    <script>
+      const tokenInput = document.getElementById('token');
+      const errorBox = document.getElementById('error');
+      const savedToken = localStorage.getItem('svadba_admin_token') || '';
+      tokenInput.value = savedToken;
+
+      function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#39;',
+        })[char]);
+      }
+
+      async function api(path, options = {}) {
+        const response = await fetch(path, {
+          method: options.method || 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Admin-Token': tokenInput.value.trim(),
+          },
+          body: options.body ? JSON.stringify(options.body) : undefined,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+        return data;
+      }
+
+      async function action(path, body, method = 'PATCH') {
+        await api(path, { method, body });
+        await load();
+      }
+
+      function renderStats(stats) {
+        document.getElementById('stats').innerHTML = [
+          ['Пользователи', stats.users],
+          ['Поставщики', stats.vendors],
+          ['Видимые', stats.visibleVendors],
+          ['Скрытые', stats.hiddenVendors],
+          ['Открытые жалобы', stats.openReports],
+          ['Delete requests', stats.openDeletionRequests],
+          ['DB', stats.storage.db],
+          ['Uploads', stats.storage.uploads],
+        ].map(([label, value]) => (
+          `<div class="stat"><strong>${esc(value)}</strong><span>${esc(label)}</span></div>`
+        )).join('');
+      }
+
+      function renderReports(reports) {
+        document.getElementById('reports').innerHTML = reports.length ? reports.map((report) => `
+          <article class="item">
+            <div class="row">
+              <h3>${esc(report.reason || 'Жалоба')}</h3>
+              <span class="pill">${esc(report.status)}</span>
+            </div>
+            <p class="meta">type: ${esc(report.targetType || 'vendor')} · vendor: ${esc(report.vendorId)} · media: ${esc(report.mediaId || '—')} · comment: ${esc(report.commentId || '—')} · reporter: ${esc(report.reporterEmail)}</p>
+            <p>${esc(report.details || '')}</p>
+            <textarea id="note-${esc(report.id)}" placeholder="Комментарий модератора">${esc(report.adminNote || '')}</textarea>
+            <div class="row">
+              <button onclick="action('/api/admin/content-reports/${esc(report.id)}', { status: 'reviewing', adminNote: document.getElementById('note-${esc(report.id)}').value })">В работу</button>
+              <button class="secondary" onclick="action('/api/admin/content-reports/${esc(report.id)}', { status: 'resolved', action: 'restore_vendor', adminNote: document.getElementById('note-${esc(report.id)}').value })">Оставить</button>
+              <button class="danger" onclick="action('/api/admin/content-reports/${esc(report.id)}', { status: 'resolved', action: 'hide_vendor', adminNote: document.getElementById('note-${esc(report.id)}').value })">Скрыть</button>
+              ${report.mediaId ? `<button class="danger" onclick="action('/api/admin/content-reports/${esc(report.id)}', { status: 'resolved', action: 'delete_media', adminNote: document.getElementById('note-${esc(report.id)}').value })">Удалить медиа</button>` : ''}
+              ${report.commentId ? `<button class="danger" onclick="action('/api/admin/content-reports/${esc(report.id)}', { status: 'resolved', action: 'delete_comment', adminNote: document.getElementById('note-${esc(report.id)}').value })">Удалить комментарий</button>` : ''}
+              <button class="danger" onclick="action('/api/admin/content-reports/${esc(report.id)}', { status: 'resolved', action: 'delete_vendor', adminNote: document.getElementById('note-${esc(report.id)}').value })">Удалить</button>
+            </div>
+          </article>
+        `).join('') : '<p class="meta">Жалоб нет.</p>';
+      }
+
+      function renderDeletions(requests) {
+        document.getElementById('deletions').innerHTML = requests.length ? requests.map((request) => `
+          <article class="item">
+            <div class="row">
+              <h3>${esc(request.email || request.id)}</h3>
+              <span class="pill">${esc(request.status)}</span>
+            </div>
+            <p class="meta">${esc(request.reason || request.id)}</p>
+            <textarea id="del-${esc(request.id)}" placeholder="Комментарий">${esc(request.adminNote || '')}</textarea>
+            <div class="row">
+              <button onclick="action('/api/admin/account-deletion-requests/${esc(request.id)}', { status: 'reviewing', adminNote: document.getElementById('del-${esc(request.id)}').value })">В работу</button>
+              <button class="danger" onclick="action('/api/admin/account-deletion-requests/${esc(request.id)}', { status: 'completed', deleteMatchingUser: true, adminNote: document.getElementById('del-${esc(request.id)}').value })">Удалить пользователя</button>
+              <button class="secondary" onclick="action('/api/admin/account-deletion-requests/${esc(request.id)}', { status: 'rejected', adminNote: document.getElementById('del-${esc(request.id)}').value })">Отклонить</button>
+            </div>
+          </article>
+        `).join('') : '<p class="meta">Запросов нет.</p>';
+      }
+
+      function renderVendors(vendors) {
+        document.getElementById('vendors').innerHTML = vendors.length ? vendors.map((vendor) => `
+          <article class="item">
+            <div class="row">
+              <h3>${esc(vendor.name)}</h3>
+              <span class="pill ${vendor.hidden ? 'danger' : 'ok'}">${vendor.hidden ? 'hidden' : 'visible'}</span>
+              <span class="pill">${esc(vendor.reportCount)} reports</span>
+            </div>
+            <p class="meta">${esc(vendor.category)} · ${esc(vendor.city)} · ${esc(vendor.owner?.email || 'no owner')}</p>
+            <div class="row">
+              <button class="secondary" onclick="action('/api/admin/vendors/${esc(vendor.id)}', { hidden: false, moderationStatus: 'Опубликовано' })">Показать</button>
+              <button class="danger" onclick="action('/api/admin/vendors/${esc(vendor.id)}', { hidden: true, moderationStatus: 'Отклонено', moderationNote: 'Скрыто модератором' })">Скрыть</button>
+              <button class="danger" onclick="action('/api/admin/vendors/${esc(vendor.id)}', {}, 'DELETE')">Удалить</button>
+            </div>
+          </article>
+        `).join('') : '<p class="meta">Поставщиков нет.</p>';
+      }
+
+      async function load() {
+        errorBox.textContent = '';
+        localStorage.setItem('svadba_admin_token', tokenInput.value.trim());
+        try {
+          const data = await api('/api/admin/moderation');
+          renderStats(data.stats);
+          renderReports(data.reports);
+          renderDeletions(data.deletionRequests);
+          renderVendors(data.vendors);
+        } catch (error) {
+          errorBox.textContent = error.message || String(error);
+        }
+      }
+
+      document.getElementById('saveToken').addEventListener('click', load);
+      document.getElementById('refresh').addEventListener('click', load);
+      if (savedToken) load();
+    </script>
+  </body>
+</html>
