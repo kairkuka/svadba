@@ -10,6 +10,12 @@ android
 .env.*
 !.env.example
 server/.env
-server/data/db.json
+server/data
+builds
+local-snapshot
+meta-review-supporting-docs
+*.aab
+*.apk
+*.zip
 *.tsbuildinfo
 npm-debug.*

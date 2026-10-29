@@ -10,6 +10,7 @@ web-build/
 expo-env.d.ts
 builds/
 server/data/
+tmp/
 
 # Native
 .kotlin/

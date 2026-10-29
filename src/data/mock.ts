@@ -5,6 +5,7 @@ import type {
   Lead,
   PortfolioItem,
   Vendor,
+  VendorImageKey,
   VendorReview,
   VendorService,
   VendorTab,
@@ -12,22 +13,21 @@ import type {
 
 export const categories = [
   'Ведущие',
-  'Организаторы',
-  'Декор',
   'Банкетные залы',
-  'Фото',
-  'Видео',
+  'Декор и флористика',
+  'Фотографы',
+  'Видеографы',
+  'Мобилографы',
   'Артисты',
-  'DJ',
-  'Платья',
-  'Костюмы',
-  'Авто',
-  'Флористика',
-  'Торты',
-  'Полиграфия',
-  'Свет и звук',
-  'Шоу',
-  'Ювелирные изделия',
+  'Лайв-бэнды',
+  'Свадебные образы',
+  'Қыз ұзату',
+  'Құдалық',
+  'Организаторы',
+  'Кондитеры',
+  'Стилисты',
+  'Шоу-программы',
+  'Техника и спецэффекты',
 ];
 
 const vendorPhones: Record<string, string> = {
@@ -187,7 +187,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v1',
     name: 'Aigerim Decor Studio',
-    category: 'Декор',
+    category: 'Декор и флористика',
     city: 'Алматы',
     rating: 4.9,
     priceFrom: 280000,
@@ -200,7 +200,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
     },
     experience: 6,
     weddings: 184,
-    availability: 'Свободна 24 августа',
+    availability: 'Свободна 24 октября',
     portfolioCount: 42,
     imageKey: 'decor',
     portfolioImageKeys: ['decor', 'florist', 'hall'],
@@ -223,14 +223,14 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v2',
     name: 'Timur Photo',
-    category: 'Фото',
+    category: 'Фотографы',
     city: 'Астана',
     rating: 4.8,
     priceFrom: 180000,
     verified: true,
     experience: 8,
     weddings: 236,
-    availability: 'Свободен 7 сентября',
+    availability: 'Свободен 7 октября',
     portfolioCount: 58,
     imageKey: 'photo',
     portfolioImageKeys: ['photo', 'decor', 'hall'],
@@ -253,14 +253,14 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v3',
     name: 'Miras Show Band',
-    category: 'Артисты',
+    category: 'Лайв-бэнды',
     city: 'Шымкент',
     rating: 4.7,
     priceFrom: 420000,
     verified: false,
     experience: 5,
     weddings: 91,
-    availability: 'Есть окна в сентябре',
+    availability: 'Есть окна в октябре',
     portfolioCount: 19,
     imageKey: 'band',
     portfolioImageKeys: ['band', 'dj', 'host'],
@@ -296,7 +296,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
     },
     experience: 11,
     weddings: 410,
-    availability: 'Свободен 31 августа',
+    availability: 'Свободен 31 октября',
     portfolioCount: 37,
     imageKey: 'hall',
     portfolioImageKeys: ['hall', 'decor', 'florist'],
@@ -319,14 +319,14 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v5',
     name: 'Nomad Wedding Films',
-    category: 'Видео',
+    category: 'Видеографы',
     city: 'Астана',
     rating: 4.8,
     priceFrom: 260000,
     verified: true,
     experience: 7,
     weddings: 148,
-    availability: 'Свободны 14 сентября',
+    availability: 'Свободны 14 октября',
     portfolioCount: 31,
     imageKey: 'film',
     portfolioImageKeys: ['film', 'photo', 'hall'],
@@ -362,7 +362,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
     },
     experience: 9,
     weddings: 265,
-    availability: 'Свободен 7 сентября',
+    availability: 'Свободен 7 октября',
     portfolioCount: 46,
     imageKey: 'host',
     portfolioImageKeys: ['host', 'dj', 'band'],
@@ -389,14 +389,14 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v7',
     name: 'Tatti Cakes',
-    category: 'Торты',
+    category: 'Кондитеры',
     city: 'Шымкент',
     rating: 4.7,
     priceFrom: 85000,
     verified: true,
     experience: 5,
     weddings: 132,
-    availability: 'Принимает заказы на август',
+    availability: 'Принимает заказы на октябрь',
     portfolioCount: 54,
     imageKey: 'cake',
     portfolioImageKeys: ['cake', 'decor', 'florist'],
@@ -419,14 +419,14 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v8',
     name: 'Maison Flora',
-    category: 'Флористика',
+    category: 'Декор и флористика',
     city: 'Астана',
     rating: 4.8,
     priceFrom: 145000,
     verified: true,
     experience: 6,
     weddings: 174,
-    availability: 'Есть окна в сентябре',
+    availability: 'Есть окна в октябре',
     portfolioCount: 63,
     imageKey: 'florist',
     portfolioImageKeys: ['florist', 'decor', 'hall'],
@@ -449,14 +449,14 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v9',
     name: 'DJ Sanzhar',
-    category: 'DJ',
+    category: 'Техника и спецэффекты',
     city: 'Алматы',
     rating: 4.6,
     priceFrom: 170000,
     verified: false,
     experience: 4,
     weddings: 88,
-    availability: 'Свободен 24 августа',
+    availability: 'Свободен 24 октября',
     portfolioCount: 22,
     imageKey: 'dj',
     portfolioImageKeys: ['dj', 'band', 'host'],
@@ -479,7 +479,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   {
     id: 'v10',
     name: 'White Ride',
-    category: 'Авто',
+    category: 'Техника и спецэффекты',
     city: 'Астана',
     rating: 4.5,
     priceFrom: 120000,
@@ -522,7 +522,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
     },
     experience: 7,
     weddings: 198,
-    availability: 'Свободен 14 сентября',
+    availability: 'Свободен 14 октября',
     portfolioCount: 34,
     imageKey: 'host',
     portfolioImageKeys: ['host', 'band', 'dj'],
@@ -558,7 +558,7 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
     verified: true,
     experience: 6,
     weddings: 156,
-    availability: 'Есть окна в августе',
+    availability: 'Есть окна в ноябре',
     portfolioCount: 28,
     imageKey: 'host',
     portfolioImageKeys: ['host', 'dj', 'photo'],
@@ -580,12 +580,338 @@ const vendorBase: Array<Omit<Vendor, 'contactPhone' | 'reviewCount' | 'reviews'>
   },
 ];
 
-export const vendors: Vendor[] = vendorBase.map((vendor) => {
+type CategoryProfilePlan = {
+  category: string;
+  slug: string;
+  names: [string, string];
+  cities: [string, string];
+  prices: [number, number];
+  imageKeys: [VendorImageKey, VendorImageKey];
+  portfolioKey: VendorImageKey;
+  videoKey: keyof typeof sampleVideos;
+  descriptions: [string, string];
+  service: string;
+};
+
+const categoryProfilePlans: CategoryProfilePlan[] = [
+  {
+    category: 'Ведущие',
+    slug: 'hosts',
+    names: ['Aruzhan Toastmaster', 'Sayan Event Voice'],
+    cities: ['Алматы', 'Астана'],
+    prices: [310000, 280000],
+    imageKeys: ['cat-hosts', 'host'],
+    portfolioKey: 'band',
+    videoKey: 'host',
+    descriptions: [
+      'Ведущая с мягкой bilingual-подачей, семейными блоками и аккуратным таймингом вечера.',
+      'Динамичный ведущий для больших банкетов, выездных церемоний и afterparty без затянутых пауз.',
+    ],
+    service: 'Ведение мероприятия',
+  },
+  {
+    category: 'Банкетные залы',
+    slug: 'halls',
+    names: ['Aurora Grand Hall', 'Sulu Palace'],
+    cities: ['Алматы', 'Шымкент'],
+    prices: [1200000, 900000],
+    imageKeys: ['cat-halls', 'hall'],
+    portfolioKey: 'decor',
+    videoKey: 'hall',
+    descriptions: [
+      'Зал до 240 гостей с welcome-зоной, сценой, экраном, парковкой и собственной банкетной кухней.',
+      'Светлый ресторанный зал для құдалық, ұзату и свадеб с отдельной комнатой для сборов.',
+    ],
+    service: 'Банкетная площадка',
+  },
+  {
+    category: 'Декор и флористика',
+    slug: 'decor',
+    names: ['Bloom Atelier KZ', 'Asyl Decor'],
+    cities: ['Астана', 'Алматы'],
+    prices: [260000, 340000],
+    imageKeys: ['cat-decor', 'florist'],
+    portfolioKey: 'decor',
+    videoKey: 'decor',
+    descriptions: [
+      'Флористика, президиум, арка и welcome-зона в одном стиле с монтажом под ключ.',
+      'Декор больших залов: свет, текстиль, композиции на столы и фотозона для гостей.',
+    ],
+    service: 'Оформление зала',
+  },
+  {
+    category: 'Фотографы',
+    slug: 'photographers',
+    names: ['Dias Wedding Photo', 'Amina Frames'],
+    cities: ['Алматы', 'Астана'],
+    prices: [190000, 220000],
+    imageKeys: ['cat-photographers', 'photo'],
+    portfolioKey: 'decor',
+    videoKey: 'photo',
+    descriptions: [
+      'Полный свадебный день, репортаж гостей, постановочные кадры и онлайн-галерея за 7 дней.',
+      'Нежная цветокоррекция, семейные портреты и быстрая preview-серия утром после события.',
+    ],
+    service: 'Фотосъемка',
+  },
+  {
+    category: 'Видеографы',
+    slug: 'videographers',
+    names: ['Nomad Film Crew', 'Qala Wedding Cinema'],
+    cities: ['Астана', 'Алматы'],
+    prices: [270000, 360000],
+    imageKeys: ['cat-videographers', 'film'],
+    portfolioKey: 'photo',
+    videoKey: 'film',
+    descriptions: [
+      'Два оператора, тизер, фильм до 35 минут, чистый звук церемонии и аэрокадры.',
+      'Кинематографичная съемка банкета, love story и reels-нарезки для соцсетей.',
+    ],
+    service: 'Видеосъемка',
+  },
+  {
+    category: 'Мобилографы',
+    slug: 'mobilographers',
+    names: ['Reels Day KZ', 'Aika Mobile Films'],
+    cities: ['Алматы', 'Караганда'],
+    prices: [90000, 120000],
+    imageKeys: ['cat-mobilographers', 'film'],
+    portfolioKey: 'photo',
+    videoKey: 'film',
+    descriptions: [
+      'Вертикальные Reels в день мероприятия: сборы, церемония, банкет и эмоции гостей.',
+      'Мобилография с монтажом коротких роликов за 24 часа и передачей исходников.',
+    ],
+    service: 'Мобильная съемка',
+  },
+  {
+    category: 'Артисты',
+    slug: 'artists',
+    names: ['Samal Live Show', 'Nurai Stage'],
+    cities: ['Шымкент', 'Алматы'],
+    prices: [180000, 230000],
+    imageKeys: ['cat-artists', 'band'],
+    portfolioKey: 'dj',
+    videoKey: 'band',
+    descriptions: [
+      'Вокальный номер, интерактив с залом и праздничный выход под сценарий вечера.',
+      'Эстрадная программа с костюмами, танцевальным блоком и адаптацией под тайминг банкета.',
+    ],
+    service: 'Артистическая программа',
+  },
+  {
+    category: 'Лайв-бэнды',
+    slug: 'live-bands',
+    names: ['Alatau Jazz Band', 'Steppe Soul Live'],
+    cities: ['Алматы', 'Астана'],
+    prices: [420000, 480000],
+    imageKeys: ['cat-live-bands', 'band'],
+    portfolioKey: 'dj',
+    videoKey: 'band',
+    descriptions: [
+      'Живая музыка для welcome, первого танца и банкетной программы с саксофоном.',
+      'Кавер-бэнд с казахским, русским и зарубежным репертуаром для больших залов.',
+    ],
+    service: 'Живая музыка',
+  },
+  {
+    category: 'Свадебные образы',
+    slug: 'wedding-looks',
+    names: ['Bride Look Room', 'Qyz Studio Dress'],
+    cities: ['Алматы', 'Астана'],
+    prices: [150000, 180000],
+    imageKeys: ['cat-wedding-looks', 'photo'],
+    portfolioKey: 'florist',
+    videoKey: 'photo',
+    descriptions: [
+      'Подбор образа невесты: платье, аксессуары, примерка и сопровождение в день события.',
+      'Свадебные комплекты для невесты и ұзату с аккуратной подгонкой по фигуре.',
+    ],
+    service: 'Образ невесты',
+  },
+  {
+    category: 'Қыз ұзату',
+    slug: 'kyz-uzatu',
+    names: ['Aru Uzatu Team', 'Shanyraq Uzatu'],
+    cities: ['Шымкент', 'Алматы'],
+    prices: [300000, 380000],
+    imageKeys: ['cat-kyz-uzatu', 'host'],
+    portfolioKey: 'decor',
+    videoKey: 'host',
+    descriptions: [
+      'Ұзату сценарийі, салт-дәстүр, жүргізуші, қыз шығару және отбасылық блоктар.',
+      'Қыз ұзату под ключ: тайминг, декор ұсыныстары, музыкалық сүйемелдеу және команда.',
+    ],
+    service: 'Қыз ұзату бағдарламасы',
+  },
+  {
+    category: 'Құдалық',
+    slug: 'kudalyk',
+    names: ['Dastur Qudalyq', 'Bereke Ceremony'],
+    cities: ['Тараз', 'Астана'],
+    prices: [220000, 260000],
+    imageKeys: ['cat-kudalyk', 'hall'],
+    portfolioKey: 'host',
+    videoKey: 'hall',
+    descriptions: [
+      'Құдалыққа арналған дәстүрлі сценарий, асаба, дастархан таймингі және сыйлық рәсімдері.',
+      'Камерный құдалық с уважительной подачей традиций, музыкой и координацией гостей.',
+    ],
+    service: 'Құдалық ұйымдастыру',
+  },
+  {
+    category: 'Организаторы',
+    slug: 'organizers',
+    names: ['Toi Project Bureau', 'Alem Wedding Planner'],
+    cities: ['Алматы', 'Астана'],
+    prices: [450000, 520000],
+    imageKeys: ['cat-organizers', 'host'],
+    portfolioKey: 'decor',
+    videoKey: 'host',
+    descriptions: [
+      'Полная организация свадьбы: смета, подрядчики, тайминг, логистика и контроль дня.',
+      'Планирование мероприятия с нуля, подбор команды, договоры и координация на площадке.',
+    ],
+    service: 'Организация под ключ',
+  },
+  {
+    category: 'Кондитеры',
+    slug: 'confectioners',
+    names: ['Tatti Cake House', 'Lumi Dessert'],
+    cities: ['Алматы', 'Костанай'],
+    prices: [95000, 130000],
+    imageKeys: ['cat-confectioners', 'cake'],
+    portfolioKey: 'decor',
+    videoKey: 'cake',
+    descriptions: [
+      'Многоярусные торты, дегустация вкусов, доставка и установка перед подачей.',
+      'Авторские десерты, кенди-бар и торт в стилистике пары с устойчивой конструкцией.',
+    ],
+    service: 'Свадебный торт',
+  },
+  {
+    category: 'Стилисты',
+    slug: 'stylists',
+    names: ['Dana Beauty Bridal', 'Mika Make Up Hair'],
+    cities: ['Алматы', 'Астана'],
+    prices: [85000, 110000],
+    imageKeys: ['cat-stylists', 'photo'],
+    portfolioKey: 'florist',
+    videoKey: 'photo',
+    descriptions: [
+      'Макияж и прическа невесты, репетиция образа, выезд утром и фиксация до вечера.',
+      'Образы для невесты, мамы и подружек с таймингом сборов и набором для коррекции.',
+    ],
+    service: 'Свадебный макияж',
+  },
+  {
+    category: 'Шоу-программы',
+    slug: 'show-programs',
+    names: ['Fire Show Almaty', 'Mirror People KZ'],
+    cities: ['Алматы', 'Шымкент'],
+    prices: [240000, 190000],
+    imageKeys: ['cat-show-programs', 'band'],
+    portfolioKey: 'dj',
+    videoKey: 'band',
+    descriptions: [
+      'Яркий шоу-номер для кульминации вечера с безопасной зоной и техническим райдером.',
+      'Welcome-перформанс, интерактивные артисты и фотомоменты для гостей.',
+    ],
+    service: 'Шоу-номер',
+  },
+  {
+    category: 'Техника и спецэффекты',
+    slug: 'effects',
+    names: ['Light Pro KZ', 'Spark FX Team'],
+    cities: ['Алматы', 'Астана'],
+    prices: [210000, 260000],
+    imageKeys: ['cat-effects', 'dj'],
+    portfolioKey: 'hall',
+    videoKey: 'dj',
+    descriptions: [
+      'Свет, звук, дым, холодные фонтаны и технический специалист на весь банкет.',
+      'Спецэффекты для первого танца, выхода пары, торта и финала вечера.',
+    ],
+    service: 'Техническое сопровождение',
+  },
+];
+
+function createLaunchCategoryVendors() {
+  return categoryProfilePlans.flatMap((plan, planIndex) =>
+    plan.names.map((name, variantIndex) => {
+      const imageKey = plan.imageKeys[variantIndex];
+      const secondImageKey = plan.imageKeys[variantIndex === 0 ? 1 : 0];
+      const id = `seed-${plan.slug}-${variantIndex + 1}`;
+      const priceFrom = plan.prices[variantIndex];
+
+      return {
+        id,
+        name,
+        category: plan.category,
+        city: plan.cities[variantIndex],
+        rating: Number((4.6 + ((planIndex + variantIndex) % 4) * 0.1).toFixed(1)),
+        priceFrom,
+        verified: true,
+        experience: 3 + ((planIndex + variantIndex) % 8),
+        weddings: 48 + planIndex * 14 + variantIndex * 17,
+        availability: getSeedAvailability(6 + planIndex + variantIndex * 3),
+        portfolioCount: 18 + planIndex * 2 + variantIndex * 5,
+        imageKey,
+        portfolioImageKeys: [imageKey, secondImageKey, plan.portfolioKey],
+        shortVideoUrl: sampleVideos[plan.videoKey],
+        description: plan.descriptions[variantIndex],
+        packages: [
+          {
+            name: plan.service,
+            price: priceFrom,
+            details: 'Консультация, подготовка, бронь даты и работа по утвержденному таймингу.',
+          },
+          {
+            name: `${plan.service} плюс`,
+            price: Math.round(priceFrom * 1.55),
+            details: 'Расширенный пакет с дополнительным временем и персональной подготовкой.',
+          },
+        ],
+      };
+    }),
+  );
+}
+
+function getSeedAvailability(daysAhead: number) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone: 'Asia/Almaty',
+    year: 'numeric',
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const date = new Date(Number(values.year), Number(values.month) - 1, Number(values.day));
+  const months = [
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+  ];
+  date.setDate(date.getDate() + daysAhead);
+  return `Свободен ${date.getDate()} ${months[date.getMonth()]}`;
+}
+
+const fullVendorBase = [...vendorBase, ...createLaunchCategoryVendors()];
+
+export const vendors: Vendor[] = fullVendorBase.map((vendor, index) => {
   const reviews = vendorReviews[vendor.id] ?? [];
 
   return {
     ...vendor,
-    contactPhone: vendorPhones[vendor.id] ?? '+77015550100',
+    contactPhone: vendorPhones[vendor.id] ?? `+7701556${String(index + 1).padStart(5, '0')}`,
     reviewCount: Math.max(reviews.length, Math.round(vendor.weddings / 7)),
     reviews,
   };
@@ -595,8 +921,8 @@ export const vendorServices: VendorService[] = [
   {
     id: 'svc1',
     title: 'Камерный декор',
-    category: 'Декор',
-    price: '280 000 тг',
+    category: 'Декор и флористика',
+    price: '280.000 ₸',
     priceType: 'От',
     packageDetails: 'Президиум, зона церемонии, базовая флористика.',
     conditions: 'Предоплата 30%, монтаж в день мероприятия.',
@@ -606,8 +932,8 @@ export const vendorServices: VendorService[] = [
   {
     id: 'svc2',
     title: 'Полное оформление зала',
-    category: 'Декор',
-    price: '650 000 тг',
+    category: 'Декор и флористика',
+    price: '650.000 ₸',
     priceType: 'От',
     packageDetails: 'Концепт, зал, фотозона, координация монтажа.',
     conditions: 'Выезд по Алматы включен, демонтаж после банкета.',
@@ -622,7 +948,7 @@ export const vendorPortfolio: PortfolioItem[] = [
   {
     id: 'pf1',
     title: 'Камерное событие в саду',
-    category: 'Декор',
+    category: 'Декор и флористика',
     description:
       'Легкая флористика, зона церемонии, теплый свет и минималистичный президиум.',
     mediaCount: 18,
@@ -633,7 +959,7 @@ export const vendorPortfolio: PortfolioItem[] = [
   {
     id: 'pf2',
     title: 'Большой банкет на 180 гостей',
-    category: 'Декор',
+    category: 'Декор и флористика',
     description:
       'Полное оформление зала: президиум, гостевые столы, welcome-зона и фотозона.',
     mediaCount: 24,
@@ -646,7 +972,7 @@ export const vendorPortfolio: PortfolioItem[] = [
   {
     id: 'pf3',
     title: 'Национальная церемония',
-    category: 'Флористика',
+    category: 'Декор и флористика',
     description:
       'Сочетание национальных элементов, живых цветов и мягкого сценического света.',
     mediaCount: 12,
@@ -659,12 +985,12 @@ export const vendorPortfolio: PortfolioItem[] = [
 export const clientLeads: Lead[] = [
   {
     id: 'l1',
-    title: 'Декор на 24 августа',
+    title: 'Декор на 24 октября',
     vendor: 'Aigerim Decor Studio',
     client: 'Вы',
-    date: '24 августа',
+    date: '24 октября',
     guests: 120,
-    budget: 'до 700 000 тг',
+    budget: 'до 700.000 ₸',
     status: 'Ожидает ответа',
     lastUpdate: '10 минут назад',
   },
@@ -673,9 +999,9 @@ export const clientLeads: Lead[] = [
     title: 'Фото полного дня',
     vendor: 'Timur Photo',
     client: 'Вы',
-    date: '7 сентября',
+    date: '7 октября',
     guests: 80,
-    budget: 'до 350 000 тг',
+    budget: 'до 350.000 ₸',
     status: 'В работе',
     lastUpdate: 'Сегодня',
   },
@@ -687,9 +1013,9 @@ export const vendorLeads: Lead[] = [
     title: 'Оформление банкетного зала',
     vendor: 'Ваш профиль',
     client: 'Алия',
-    date: '24 августа',
+    date: '24 октября',
     guests: 120,
-    budget: '650 000 тг',
+    budget: '650.000 ₸',
     status: 'Новая',
     lastUpdate: '5 минут назад',
   },
@@ -698,9 +1024,9 @@ export const vendorLeads: Lead[] = [
     title: 'Камерное событие',
     vendor: 'Ваш профиль',
     client: 'Данияр',
-    date: '2 сентября',
+    date: '2 октября',
     guests: 45,
-    budget: '320 000 тг',
+    budget: '320.000 ₸',
     status: 'Ожидает подтверждения',
     lastUpdate: '1 час назад',
   },
@@ -712,7 +1038,7 @@ export const chatMessages: ChatMessage[] = [
     leadId: 'l1',
     authorRole: 'client',
     authorName: 'Алия',
-    text: 'Здравствуйте! Хотим оформить банкетный зал 24 августа.',
+    text: 'Здравствуйте! Хотим оформить банкетный зал 24 октября.',
     createdAt: '10:20',
     status: 'Прочитано',
   },
@@ -730,7 +1056,7 @@ export const chatMessages: ChatMessage[] = [
     leadId: 'l2',
     authorRole: 'vendor',
     authorName: 'Timur Photo',
-    text: 'Здравствуйте, на 7 сентября свободен полный день.',
+    text: 'Здравствуйте, на 7 октября свободен полный день.',
     createdAt: 'Сегодня',
     status: 'Отправлено',
   },
@@ -739,7 +1065,7 @@ export const chatMessages: ChatMessage[] = [
     leadId: 'vl1',
     authorRole: 'client',
     authorName: 'Алия',
-    text: 'Добрый день, свободна ли дата 24 августа?',
+    text: 'Добрый день, свободна ли дата 24 октября?',
     createdAt: '5 мин',
     status: 'Прочитано',
   },

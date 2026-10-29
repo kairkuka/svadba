@@ -18,7 +18,23 @@ export type VendorImageKey =
   | 'cake'
   | 'florist'
   | 'dj'
-  | 'car';
+  | 'car'
+  | 'cat-hosts'
+  | 'cat-halls'
+  | 'cat-decor'
+  | 'cat-photographers'
+  | 'cat-videographers'
+  | 'cat-mobilographers'
+  | 'cat-artists'
+  | 'cat-live-bands'
+  | 'cat-wedding-looks'
+  | 'cat-kyz-uzatu'
+  | 'cat-kudalyk'
+  | 'cat-organizers'
+  | 'cat-confectioners'
+  | 'cat-stylists'
+  | 'cat-show-programs'
+  | 'cat-effects';
 
 export type FeaturedVendorStyle = 'gold' | 'neon' | 'royal' | 'rose';
 
@@ -100,6 +116,66 @@ export type PortfolioMedia = {
   optimized?: boolean;
 };
 
+export type MediaComment = {
+  id: string;
+  authorId?: string;
+  author: string;
+  authorAvatarUri?: string;
+  text: string;
+  createdAt: string;
+};
+
+export type MediaLikeUser = {
+  id: string;
+  name: string;
+  avatarUri?: string;
+};
+
+export type VendorMediaStats = {
+  likeCount: number;
+  likedByPreview?: MediaLikeUser[];
+  saveCount?: number;
+  commentCount: number;
+  comments: MediaComment[];
+};
+
+export type VendorMediaItem = {
+  id: string;
+  uri: string;
+  type: 'image' | 'video';
+  fileName?: string;
+  thumbnailUrl?: string;
+  durationSeconds?: number;
+  width?: number;
+  height?: number;
+  caption?: string;
+  role?: 'main' | 'cover' | 'reels' | 'profile' | 'story';
+  publicationId?: string;
+  publicationKind?: 'photo' | 'video' | 'story';
+  publicationIndex?: number;
+  publicationCount?: number;
+  createdAt?: string;
+  expiresAt?: string;
+  likeCount?: number;
+  likedByPreview?: MediaLikeUser[];
+  saveCount?: number;
+  commentCount?: number;
+  comments?: MediaComment[];
+};
+
+export type StoryCollection = {
+  id: string;
+  name: string;
+  coverStoryId?: string;
+  storyIds: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type StoryHighlightCollection = StoryCollection & {
+  stories: VendorMediaItem[];
+};
+
 export type CreatePortfolioItemPayload = {
   title: string;
   category: string;
@@ -121,9 +197,13 @@ export type Vendor = {
   availability: string;
   portfolioCount: number;
   contactPhone: string;
+  likeCount?: number;
   reviewCount: number;
   shortVideoUrl?: string;
   shortVideoUrls?: string[];
+  media?: VendorMediaItem[];
+  storyHighlights?: StoryHighlightCollection[];
+  mediaStats?: Record<string, VendorMediaStats>;
   imageKey?: VendorImageKey;
   portfolioImageKeys?: VendorImageKey[];
   description: string;

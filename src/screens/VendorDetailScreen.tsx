@@ -1,59 +1,176 @@
 import {
-  ArrowLeft,
   BadgeCheck,
+  Bookmark,
   CalendarDays,
-  Camera,
-  EyeOff,
+  Clapperboard,
+  ChevronLeft,
+  ChevronRight,
   Flag,
+  Grid2X2,
   Heart,
-  PhoneCall,
+  MapPin,
+  MessageCircle,
   Play,
+  Repeat2,
+  Send,
+  ShieldCheck,
   Star,
+  UserRound,
+  Volume2,
+  VolumeX,
+  X,
   type LucideIcon,
 } from 'lucide-react-native';
-import { useState } from 'react';
+import { useEventListener } from 'expo';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  FlatList,
   Image,
-  Linking,
+  type ImageSourcePropType,
+  KeyboardAvoidingView,
+  Modal,
+  PanResponder,
+  Platform,
   Pressable,
+  Share,
   Text,
   TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { KeyboardSafeScrollView as ScrollView } from '../components/KeyboardSafeScrollView';
 import {
   getVendorImageSource,
   getVendorPortfolioSources,
 } from '../data/vendorImages';
+import { MediaCommentRow } from '../components/MediaCommentRow';
 import { colors, styles } from '../theme/styles';
-import type { Vendor } from '../types';
-import { getFeaturedVisualStyle } from '../utils/featured';
+import type {
+  MediaComment,
+  MediaLikeUser,
+  Vendor,
+  VendorMediaItem,
+} from '../types';
 import { formatMoney } from '../utils/format';
+
+type ProfileMediaEntry = {
+  id: string;
+  uri: string;
+  source: ImageSourcePropType;
+  type: 'image' | 'video';
+  carouselUris: string[];
+  publicationKind: 'photo' | 'video';
+  caption: string;
+  likeCount: number;
+  likedByPreview: MediaLikeUser[];
+  saveCount: number;
+  commentCount: number;
+  comments: MediaComment[];
+  index: number;
+};
+
+function pluralizeRu(count: number, one: string, few: string, many: string) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
 
 export function VendorDetailScreen({
   vendor,
+  initialBookingCalendarOpen = false,
+  initialBookingCreated = false,
+  initialProfileTab = 'media',
   isSaved,
+  isSelfPreview = false,
+  likedMediaIds = [],
+  savedMediaIds = [],
+  media,
   onBack,
   onBlock,
   onBook,
+  onMediaView,
+  onFetchMediaLikes,
   onReport,
+  onReportComment,
+  onReportMedia,
+  onSubmitMediaComment,
+  onToggleMediaLiked,
+  onToggleMediaSaved,
   onToggleSaved,
 }: {
   vendor: Vendor;
+  initialBookingCalendarOpen?: boolean;
+  initialBookingCreated?: boolean;
+  initialProfileTab?: 'media' | 'reviews';
   isSaved: boolean;
+  isSelfPreview?: boolean;
+  likedMediaIds?: string[];
+  savedMediaIds?: string[];
+  media?: VendorMediaItem[];
   onBack: () => void;
   onBlock: () => void;
-  onBook: (date: string, timeFrom: string, timeTo: string) => boolean | Promise<boolean>;
+  onBook: (date: string, timeFrom: string, timeTo: string) => boolean | string | Promise<boolean | string>;
+  onMediaView?: () => void;
+  onFetchMediaLikes?: (mediaId: string) => Promise<MediaLikeUser[]>;
   onReport: () => void;
+  onReportComment?: (mediaId: string, commentId: string) => Promise<boolean>;
+  onReportMedia?: (mediaId: string) => Promise<boolean>;
+  onSubmitMediaComment?: (mediaId: string, text: string) => Promise<boolean>;
+  onToggleMediaLiked?: (mediaId: string) => void;
+  onToggleMediaSaved?: (mediaId: string) => void;
   onToggleSaved: () => void;
 }) {
-  const { width } = useWindowDimensions();
-  const [profileTab, setProfileTab] = useState<'media' | 'reviews'>('media');
-  const [bookingCalendarOpen, setBookingCalendarOpen] = useState(false);
-  const [bookingCreated, setBookingCreated] = useState(false);
+  const { height, width } = useWindowDimensions();
+  const [profileTab, setProfileTab] = useState<
+    'grid' | 'reels' | 'reviews' | 'tagged'
+  >(
+    initialProfileTab === 'reviews' ? 'reviews' : 'grid',
+  );
+  const [bookingCalendarOpen, setBookingCalendarOpen] = useState(
+    initialBookingCalendarOpen,
+  );
+  const [bookingCreated, setBookingCreated] = useState(initialBookingCreated);
   const [bookingMessage, setBookingMessage] = useState('');
-  const [moderationMessage, setModerationMessage] = useState('');
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState<number | null>(null);
+  const [commentsMediaIndex, setCommentsMediaIndex] = useState<number | null>(null);
+  const [likesMediaIndex, setLikesMediaIndex] = useState<number | null>(null);
+  const [mediaLikers, setMediaLikers] = useState<MediaLikeUser[]>([]);
+  const [mediaLikersLoading, setMediaLikersLoading] = useState(false);
+  const closeProfileMediaViewer = () => {
+    setCommentsMediaIndex(null);
+    setLikesMediaIndex(null);
+    setSelectedMediaIndex(null);
+  };
+  const profileMediaEdgeSwipe = useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: (event) => event.nativeEvent.pageX <= 32,
+        onMoveShouldSetPanResponder: (_event, gesture) =>
+          gesture.x0 <= 32 &&
+          gesture.dx > 10 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy),
+        onPanResponderRelease: (_event, gesture) => {
+          if (gesture.dx >= 60 && Math.abs(gesture.dy) <= 90) {
+            closeProfileMediaViewer();
+          }
+        },
+        onPanResponderTerminationRequest: () => false,
+      }),
+    [],
+  );
+  const [storyViewer, setStoryViewer] = useState<
+    | { kind: 'active'; storyIndex: number }
+    | { collectionIndex: number; kind: 'highlight'; storyIndex: number }
+    | null
+  >(null);
+  const [mediaCommentDraft, setMediaCommentDraft] = useState('');
+  const [mediaCommentStatus, setMediaCommentStatus] = useState('');
   const [selectedBookingDate, setSelectedBookingDate] = useState(() =>
     getDefaultBookingDate(vendor.availability),
   );
@@ -62,32 +179,197 @@ export function VendorDetailScreen({
   const [visibleBookingMonth, setVisibleBookingMonth] = useState(() =>
     getDefaultBookingMonth(vendor.availability),
   );
-  const portfolioSources = getVendorPortfolioSources(vendor);
-  const mediaSources = [...portfolioSources, ...portfolioSources].slice(0, 6);
+  const uploadedMedia = media?.length ? media : vendor.media ?? [];
+  const storyUploadedMedia = uploadedMedia.filter(
+    (item) => {
+      const isStory = item.publicationKind === 'story' || item.role === 'story';
+      if (!isStory) return false;
+      if (!item.expiresAt) return true;
+      const expiresAt = Date.parse(item.expiresAt);
+      return Number.isFinite(expiresAt) && expiresAt > Date.now();
+    },
+  );
+  const feedUploadedMedia = uploadedMedia.filter(
+    (item) => item.publicationKind !== 'story' && item.role !== 'story',
+  );
+  const groupedUploadedMedia = Array.from(
+    feedUploadedMedia.reduce((groups, item) => {
+      const publicationId = item.publicationId || item.id;
+      const current = groups.get(publicationId) || [];
+      current.push(item);
+      groups.set(publicationId, current);
+      return groups;
+    }, new Map<string, VendorMediaItem[]>()),
+  ).map(([, items]) =>
+    [...items].sort(
+      (left, right) => (left.publicationIndex ?? 0) - (right.publicationIndex ?? 0),
+    ),
+  );
+  const uploadedSources: ImageSourcePropType[] = groupedUploadedMedia.map(
+    (items) => ({ uri: items[0].thumbnailUrl || items[0].uri }),
+  );
+  const portfolioSources = uploadedSources.length
+    ? uploadedSources
+    : getVendorPortfolioSources(vendor);
+  const mediaItems: ProfileMediaEntry[] = uploadedSources.length
+    ? groupedUploadedMedia.slice(0, 18).map((items, index) => {
+        const item = items[0];
+        return {
+        id: item.id,
+        uri: item.uri,
+        source: { uri: item.thumbnailUrl || item.uri } as ImageSourcePropType,
+        type: item.type,
+        carouselUris: items.map((entry) => entry.uri),
+        publicationKind: item.type === 'video' ? 'video' as const : 'photo' as const,
+        caption: item.caption || vendor.description,
+        likeCount: Number(item.likeCount || vendor.mediaStats?.[item.id]?.likeCount || 0),
+        likedByPreview:
+          item.likedByPreview || vendor.mediaStats?.[item.id]?.likedByPreview || [],
+        saveCount: Number(item.saveCount ?? vendor.mediaStats?.[item.id]?.saveCount ?? 0),
+        commentCount: Number(
+          item.commentCount ?? vendor.mediaStats?.[item.id]?.commentCount ?? 0,
+        ),
+        comments: item.comments || vendor.mediaStats?.[item.id]?.comments || [],
+        index,
+        };
+      })
+    : [...portfolioSources, ...portfolioSources].slice(0, 6).map((source, index) => {
+        const id = `${vendor.id}:profile:${index}`;
+        const stats = vendor.mediaStats?.[id];
+        return {
+          id,
+          uri: '',
+          source,
+          type: 'image' as const,
+          carouselUris: [],
+          publicationKind: 'photo' as const,
+          caption: vendor.description,
+          likeCount: Number(stats?.likeCount || 0),
+          likedByPreview: stats?.likedByPreview || [],
+          saveCount: Number(stats?.saveCount || 0),
+          commentCount: Number(stats?.commentCount || 0),
+          comments: stats?.comments || [],
+          index,
+        };
+      });
+  const activeStories = storyUploadedMedia.slice(0, 24).map((item) => ({
+    label: 'Сторис',
+    source: { uri: item.uri } as ImageSourcePropType,
+    type: item.type,
+    uri: item.uri,
+  }));
+  const highlights = (vendor.storyHighlights ?? []).map((collection) => {
+    const stories = collection.stories.map((item) => ({
+      label: collection.name,
+      source: { uri: item.uri } as ImageSourcePropType,
+      type: item.type,
+      uri: item.uri,
+    }));
+    const cover =
+      stories[
+        Math.max(
+          0,
+          collection.stories.findIndex((story) => story.id === collection.coverStoryId),
+        )
+      ] ?? stories[0];
+    return {
+      id: collection.id,
+      label: collection.name,
+      source: cover?.source,
+      stories,
+    };
+  }).filter((collection) => collection.stories.length > 0 && collection.source);
+  const viewedStories =
+    storyViewer?.kind === 'active'
+      ? activeStories
+      : storyViewer?.kind === 'highlight'
+        ? highlights[storyViewer.collectionIndex]?.stories ?? []
+        : [];
+  const viewedStoryIndex = storyViewer?.storyIndex ?? 0;
+  const viewedStory = viewedStories[viewedStoryIndex];
+  const viewedStoryLabel =
+    storyViewer?.kind === 'highlight'
+      ? highlights[storyViewer.collectionIndex]?.label
+      : 'Сторис';
+  const changeViewedStory = (delta: number) => {
+    setStoryViewer((current) => {
+      if (!current) return null;
+      const source =
+        current.kind === 'active'
+          ? activeStories
+          : highlights[current.collectionIndex]?.stories ?? [];
+      const nextIndex = current.storyIndex + delta;
+      if (nextIndex < 0) return { ...current, storyIndex: 0 };
+      if (nextIndex >= source.length) return null;
+      return { ...current, storyIndex: nextIndex };
+    });
+  };
+  const mediaEntries = mediaItems.map((item, index) => ({ ...item, index }));
+  const visibleMediaEntries =
+    profileTab === 'tagged'
+      ? mediaEntries.slice(3)
+      : profileTab === 'reels'
+        ? mediaEntries.filter((item) => item.type === 'video')
+        : mediaEntries;
+  const viewerMediaItems = visibleMediaEntries;
   const compactLayout = width <= 430;
-  const backIconSize = compactLayout ? 26 : 30;
-  const verifiedIconSize = compactLayout ? 24 : 30;
-  const calendarIconSize = compactLayout ? 17 : 20;
-  const actionIconSize = compactLayout ? 21 : 25;
-  const saveIconSize = compactLayout ? 25 : 30;
-  const featuredVisual = getFeaturedVisualStyle(vendor.featured);
+  const calendarIconSize = 20;
   const bookingCalendar = getBookingCalendarRows(visibleBookingMonth);
   const visibleMonthTitle = getMonthTitle(visibleBookingMonth);
+  const previousMonthDisabled = isPastBookingMonth(visibleBookingMonth);
+  const bookingTimeError = getBookingTimeError(selectedTimeFrom, selectedTimeTo);
+  const availabilityLabel = getDisplayAvailability(vendor.availability);
+  const commentsMedia =
+    commentsMediaIndex === null ? null : viewerMediaItems[commentsMediaIndex] ?? null;
+  useEffect(() => {
+    setMediaCommentDraft('');
+    setMediaCommentStatus('');
+  }, [commentsMedia?.id]);
   const changeBookingMonth = (delta: number) => {
     setVisibleBookingMonth(
       (current) => new Date(current.getFullYear(), current.getMonth() + delta, 1),
     );
   };
-
-  const openWhatsApp = () => {
-    const phone = vendor.contactPhone.replace(/\D/g, '');
-    const message = encodeURIComponent(
-      `Здравствуйте! Нашли вас на SVADBA.kz. Хотим уточнить дату и условия: ${vendor.name}`,
-    );
-
-    void Linking.openURL(`https://wa.me/${phone}?text=${message}`).catch(
-      () => undefined,
-    );
+  const submitSelectedMediaComment = async () => {
+    if (!commentsMedia || !onSubmitMediaComment) return;
+    const text = mediaCommentDraft.trim();
+    if (!text) {
+      setMediaCommentStatus('Напишите комментарий');
+      return;
+    }
+    setMediaCommentStatus('Отправляем...');
+    const saved = await onSubmitMediaComment(commentsMedia.id, text);
+    setMediaCommentStatus(saved ? 'Комментарий добавлен' : 'Не удалось отправить');
+    if (saved) {
+      setMediaCommentDraft('');
+    }
+  };
+  const reportSelectedMedia = async () => {
+    if (!commentsMedia || !onReportMedia) return;
+    setMediaCommentStatus('Отправляем жалобу...');
+    const saved = await onReportMedia(commentsMedia.id);
+    setMediaCommentStatus(saved ? 'Жалоба отправлена' : 'Не удалось отправить жалобу');
+  };
+  const reportSelectedComment = async (commentId: string) => {
+    if (!commentsMedia || !onReportComment) return;
+    setMediaCommentStatus('Отправляем жалобу...');
+    const saved = await onReportComment(commentsMedia.id, commentId);
+    setMediaCommentStatus(saved ? 'Жалоба отправлена' : 'Не удалось отправить жалобу');
+  };
+  const openMediaLikes = async (index: number) => {
+    const item = viewerMediaItems[index];
+    if (!item) return;
+    setLikesMediaIndex(index);
+    setMediaLikers(item.likedByPreview || []);
+    if (!onFetchMediaLikes) return;
+    setMediaLikersLoading(true);
+    try {
+      setMediaLikers(await onFetchMediaLikes(item.id));
+    } catch {
+      setMediaLikers(item.likedByPreview || []);
+    } finally {
+      setMediaLikersLoading(false);
+    }
   };
 
   return (
@@ -96,341 +378,378 @@ export function VendorDetailScreen({
         style={[
           styles.detailHeader,
           compactLayout && styles.detailHeaderCompact,
+          styles.detailReferenceHeader,
         ]}
       >
-        <Pressable
-          onPress={onBack}
-          style={[
-            styles.detailHeaderBackButton,
-            compactLayout && styles.detailHeaderBackButtonCompact,
-          ]}
-        >
-          <ArrowLeft
-            color={colors.surface}
-            size={backIconSize}
-            strokeWidth={2.5}
-          />
-        </Pressable>
-        <View
-          style={[
-            styles.detailProfileTop,
-            compactLayout && styles.detailProfileTopCompact,
-          ]}
-        >
-          <View
-            style={[
-              styles.detailAvatarRing,
-              compactLayout && styles.detailAvatarRingCompact,
-              featuredVisual && [
-                styles.detailAvatarFeatured,
-                {
-                  backgroundColor: featuredVisual.ringInner,
-                  borderColor: featuredVisual.ringOuter,
-                  shadowColor: featuredVisual.ringOuter,
-                },
-              ],
-            ]}
+        <View style={styles.detailReferenceIdentity}>
+          <Pressable
+            accessibilityLabel={
+              activeStories.length ? `Открыть активные Stories ${vendor.name}` : undefined
+            }
+            accessibilityRole={activeStories.length ? 'button' : undefined}
+            disabled={!activeStories.length}
+            onPress={() => setStoryViewer({ kind: 'active', storyIndex: 0 })}
+            style={styles.detailReferenceAvatarRing}
           >
             <Image
               accessibilityIgnoresInvertColors
               resizeMode="cover"
               source={getVendorImageSource(vendor)}
-              style={[
-                styles.detailAvatarImage,
-                compactLayout && styles.detailAvatarImageCompact,
-              ]}
+              style={styles.detailReferenceAvatarImage}
             />
-          </View>
-          <View
-            style={[
-              styles.detailProfileMain,
-              compactLayout && styles.detailProfileMainCompact,
-            ]}
-          >
-            <View
-              style={[
-                styles.detailNameLine,
-                compactLayout && styles.detailNameLineCompact,
-              ]}
-            >
+          </Pressable>
+          <View style={styles.detailReferenceIdentityCopy}>
+            <View style={styles.detailReferenceNameRow}>
               <Text
                 numberOfLines={1}
-                style={[
-                  styles.detailTitle,
-                  compactLayout && styles.detailTitleCompact,
-                ]}
+                style={styles.detailReferenceName}
               >
                 {vendor.name}
               </Text>
               {vendor.verified ? (
                 <BadgeCheck
                   accessibilityLabel="Проверенный подрядчик"
-                  color={colors.green}
-                  fill={colors.greenSoft}
-                  size={verifiedIconSize}
+                  color="#4A8BFF"
+                  fill="#102A5C"
+                  size={15}
                   strokeWidth={2.5}
                 />
               ) : null}
             </View>
-            {vendor.featured?.enabled && featuredVisual ? (
-              <View
-                style={[
-                  styles.detailFeaturedBadge,
-                  compactLayout && styles.detailFeaturedBadgeCompact,
-                  {
-                    backgroundColor: featuredVisual.badgeBackground,
-                    borderColor: featuredVisual.badgeBorder,
-                  },
-                ]}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.detailFeaturedBadgeText,
-                    compactLayout && styles.detailFeaturedBadgeTextCompact,
-                    { color: featuredVisual.badgeText },
-                  ]}
-                >
-                  {vendor.featured.badgeText}
-                </Text>
-              </View>
-            ) : null}
-            <View
-              style={[
-                styles.detailProfileStats,
-                compactLayout && styles.detailProfileStatsCompact,
-              ]}
-            >
-              <View
-                style={[
-                  styles.detailProfileStat,
-                  compactLayout && styles.detailProfileStatCompact,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.detailProfileStatValue,
-                    compactLayout && styles.detailProfileStatValueCompact,
-                  ]}
-                >
-                  {vendor.portfolioCount}
-                </Text>
-                <Text
-                  style={[
-                    styles.detailProfileStatLabel,
-                    compactLayout && styles.detailProfileStatLabelCompact,
-                  ]}
-                >
-                  работ
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.detailProfileStat,
-                  compactLayout && styles.detailProfileStatCompact,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.detailProfileStatValue,
-                    compactLayout && styles.detailProfileStatValueCompact,
-                  ]}
-                >
-                  {vendor.reviewCount}
-                </Text>
-                <Text
-                  style={[
-                    styles.detailProfileStatLabel,
-                    compactLayout && styles.detailProfileStatLabelCompact,
-                  ]}
-                >
-                  отзывов
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.detailProfileStat,
-                  compactLayout && styles.detailProfileStatCompact,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.detailProfileStatValue,
-                    compactLayout && styles.detailProfileStatValueCompact,
-                  ]}
-                >
-                  {vendor.weddings}
-                </Text>
-                <Text
-                  style={[
-                    styles.detailProfileStatLabel,
-                    compactLayout && styles.detailProfileStatLabelCompact,
-                  ]}
-                >
-                  событий
-                </Text>
-              </View>
+            <Text style={styles.detailReferenceCategory}>{vendor.category}</Text>
+            <View style={styles.detailReferenceLocation}>
+              <MapPin color="#98A1AA" size={12} strokeWidth={2.2} />
+              <Text style={styles.detailReferenceLocationText}>{vendor.city}</Text>
             </View>
           </View>
-        </View>
-        <View
-          style={[
-            styles.detailBioBlock,
-            compactLayout && styles.detailBioBlockCompact,
-          ]}
-        >
-          <Text
-            style={[
-              styles.detailCategoryText,
-              compactLayout && styles.detailCategoryTextCompact,
-            ]}
-          >
-            {vendor.category} · {vendor.city}
-          </Text>
-          <Text
-            style={[
-              styles.detailPriceLine,
-              compactLayout && styles.detailPriceLineCompact,
-            ]}
-          >
-            от {formatMoney(vendor.priceFrom)} · {vendor.rating} рейтинг ·{' '}
-            {vendor.experience} лет
-          </Text>
-          <Text
-            numberOfLines={3}
-            style={[
-              styles.detailDescriptionText,
-              compactLayout && styles.detailDescriptionTextCompact,
-            ]}
-          >
-            {vendor.description}
-          </Text>
-          <View
-            style={[
-              styles.detailAvailabilityPill,
-              compactLayout && styles.detailAvailabilityPillCompact,
-            ]}
-          >
-            <CalendarDays
-              color={colors.gold}
-              size={calendarIconSize}
-              strokeWidth={2.5}
-            />
-            <Text
-              style={[
-                styles.detailAvailabilityText,
-                compactLayout && styles.detailAvailabilityTextCompact,
+          {isSelfPreview ? null : (
+            <Pressable
+              accessibilityLabel={isSaved ? 'Отписаться' : 'Подписаться'}
+              accessibilityRole="button"
+              onPress={onToggleSaved}
+              style={({ pressed }) => [
+                styles.detailReferenceFollow,
+                isSaved && styles.detailReferenceFollowActive,
+                pressed && styles.pressed,
               ]}
             >
-              {vendor.availability}
+              <Text style={styles.detailReferenceFollowText}>
+                {isSaved ? 'Вы подписаны' : 'Подписаться'}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        <View style={styles.detailReferenceBio}>
+          <Text numberOfLines={3} style={styles.detailReferenceDescription}>
+            {vendor.description}
+          </Text>
+          <View style={styles.detailReferenceCommerce}>
+            <Text
+              style={styles.detailReferencePrice}
+            >
+              от {formatMoney(vendor.priceFrom)}
+            </Text>
+            {vendor.reviewCount > 0 ? (
+              <View style={styles.detailRatingPill}>
+                <Star
+                  color={colors.gold}
+                  fill={colors.gold}
+                  size={13}
+                  strokeWidth={2}
+                />
+                <Text style={styles.detailRatingPillText}>{vendor.rating}</Text>
+                <Text style={styles.detailRatingCount}>({vendor.reviewCount})</Text>
+              </View>
+            ) : (
+              <Text style={styles.detailExperienceText}>Нет отзывов</Text>
+            )}
+            {vendor.experience > 0 ? (
+              <Text style={styles.detailExperienceText}>{vendor.experience} лет опыта</Text>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.detailReferenceStats}>
+          {[
+            [vendor.portfolioCount, 'Работ'],
+            [vendor.reviewCount, 'Отзывов'],
+            [vendor.weddings, 'Событий'],
+          ].map(([value, label], index) => (
+            <View key={label} style={styles.detailReferenceStatSlot}>
+              {index > 0 ? <View style={styles.detailReferenceStatDivider} /> : null}
+              <View style={styles.detailReferenceStat}>
+                <Text style={styles.detailReferenceStatValue}>{value}</Text>
+                <Text style={styles.detailReferenceStatLabel}>{label}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+        {highlights.length ? (
+          <ScrollView
+            contentContainerStyle={styles.detailReferenceHighlights}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {highlights.map((highlight, index) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Открыть историю ${highlight.label}`}
+                key={`${highlight.label}-${index}`}
+                onPress={() =>
+                  setStoryViewer({ collectionIndex: index, kind: 'highlight', storyIndex: 0 })
+                }
+                style={({ pressed }) => [
+                  styles.detailReferenceHighlight,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.detailReferenceHighlightRing}>
+                  <Image
+                    accessibilityIgnoresInvertColors
+                    resizeMode="cover"
+                    source={highlight.source}
+                    style={styles.detailReferenceHighlightImage}
+                  />
+                </View>
+                <Text numberOfLines={1} style={styles.detailReferenceHighlightLabel}>
+                  {highlight.label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+        <View style={styles.detailReferenceTrustRow}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setBookingCalendarOpen(true)}
+              style={[
+                styles.detailAvailabilityPill,
+                compactLayout && styles.detailAvailabilityPillCompact,
+                styles.detailReferenceAvailabilityPill,
+              ]}
+            >
+              <CalendarDays
+                color={colors.green}
+                size={calendarIconSize}
+                strokeWidth={2.5}
+              />
+              <Text
+                style={[
+                  styles.detailAvailabilityText,
+                  compactLayout && styles.detailAvailabilityTextCompact,
+                  styles.detailReferenceAvailabilityText,
+                ]}
+              >
+                {availabilityLabel}
+              </Text>
+            </Pressable>
+            {vendor.verified ? (
+              <View style={styles.detailVerifiedPill}>
+                <ShieldCheck color="#8FA0FF" size={15} strokeWidth={2.2} />
+                <Text style={styles.detailVerifiedText}>Проверен</Text>
+              </View>
+            ) : null}
+        </View>
+      </View>
+      {bookingCreated && !isSelfPreview ? (
+        <View style={styles.detailBookingSuccess}>
+          <View style={styles.detailBookingSuccessIcon}>
+            <CalendarDays color="#BFE8D1" size={20} strokeWidth={2.4} />
+          </View>
+          <View style={styles.detailBookingSuccessCopy}>
+            <Text style={styles.detailBookingSuccessTitle}>Заявка отправлена</Text>
+            <Text style={styles.detailBookingSuccessText}>
+              {formatBookingDateValue(selectedBookingDate)} · {selectedTimeFrom}-{selectedTimeTo}. Поставщик подтвердит дату.
             </Text>
           </View>
         </View>
-        <View
-          style={[
-            styles.detailProfileActions,
-            compactLayout && styles.detailProfileActionsCompact,
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            onPress={openWhatsApp}
-            style={({ pressed }) => [
-              styles.detailPrimaryAction,
-              compactLayout && styles.detailPrimaryActionCompact,
-              pressed && styles.pressed,
-            ]}
-          >
-            <PhoneCall
-              color={colors.surface}
-              size={actionIconSize}
-              strokeWidth={2.5}
-            />
-            <Text
-              style={[
-                styles.detailPrimaryActionText,
-                compactLayout && styles.detailPrimaryActionTextCompact,
-              ]}
-            >
-              Связаться
+      ) : null}
+      <View style={styles.profileIconTabs}>
+        <ProfileTabButton
+          label="Все работы"
+          icon={Grid2X2}
+          active={profileTab === 'grid'}
+          onPress={() => setProfileTab('grid')}
+        />
+        <ProfileTabButton
+          label="Reels"
+          icon={Clapperboard}
+          active={profileTab === 'reels'}
+          onPress={() => setProfileTab('reels')}
+        />
+        <ProfileTabButton
+          label={`Отзывы: ${vendor.reviewCount}`}
+          icon={Repeat2}
+          active={profileTab === 'reviews'}
+          onPress={() => setProfileTab('reviews')}
+        />
+        <ProfileTabButton
+          label="Отмеченные работы"
+          icon={UserRound}
+          active={profileTab === 'tagged'}
+          onPress={() => setProfileTab('tagged')}
+        />
+      </View>
+      {profileTab !== 'reviews' ? (
+        <View style={styles.profileMediaGrid}>
+          {vendor.portfolioCount > visibleMediaEntries.length ? (
+            <Text style={styles.profileResultCount}>
+              Показано {visibleMediaEntries.length} из {vendor.portfolioCount} работ
             </Text>
-          </Pressable>
-          <Pressable
-            accessibilityLabel={isSaved ? 'Убрать из сохраненного' : 'Сохранить'}
-            accessibilityRole="button"
-            onPress={onToggleSaved}
-            style={({ pressed }) => [
-              styles.detailSecondaryAction,
-              compactLayout && styles.detailSecondaryActionCompact,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Heart
-              color={colors.surface}
-              fill={isSaved ? colors.surface : 'transparent'}
-              size={saveIconSize}
-              strokeWidth={2.25}
-            />
-          </Pressable>
+          ) : null}
+          {visibleMediaEntries.length ? (
+            visibleMediaEntries.map(({ carouselUris, index, source }) => (
+              <Pressable
+                accessibilityLabel={`Работа ${index + 1}`}
+                accessibilityRole="button"
+                key={`${vendor.id}-media-${index}`}
+                onPress={() => {
+                  onMediaView?.();
+                  setSelectedMediaIndex(
+                    Math.max(
+                      0,
+                      viewerMediaItems.findIndex((item) => item.index === index),
+                    ),
+                  );
+                }}
+                style={({ pressed }) => [
+                  styles.profileMediaTile,
+                  styles.profileMediaTileReel,
+                  pressed && styles.profileMediaTilePressed,
+                ]}
+              >
+                <Image
+                  accessibilityIgnoresInvertColors
+                  resizeMode="cover"
+                  source={source}
+                  style={styles.profileMediaImage}
+                />
+                {profileTab === 'reels' ? (
+                  <>
+                    <View style={styles.profileMediaPlayBadge}>
+                      <Play
+                        color={colors.surface}
+                        fill={colors.surface}
+                        size={13}
+                        strokeWidth={2.4}
+                      />
+                    </View>
+                    <View style={styles.profileMediaViewCount}>
+                      <Play
+                        color={colors.surface}
+                        fill={colors.surface}
+                        size={10}
+                        strokeWidth={2}
+                      />
+                      <Text style={styles.profileMediaViewCountText}>Reels</Text>
+                    </View>
+                  </>
+                ) : null}
+                {profileTab !== 'reels' && carouselUris.length > 1 ? (
+                  <View style={styles.profileMediaCarouselBadge}>
+                    <Grid2X2 color={colors.surface} size={13} strokeWidth={2.2} />
+                    <Text style={styles.profileMediaCarouselBadgeText}>
+                      {carouselUris.length}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+            ))
+          ) : (
+            <View style={styles.clientEmptyCard}>
+              <Text style={styles.clientEmptyTitle}>Медиа пока нет</Text>
+              <Text style={styles.clientEmptyText}>
+                Поставщик еще не загрузил фото или видео.
+              </Text>
+            </View>
+          )}
         </View>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => {
-            setBookingCalendarOpen(true);
-          }}
-          style={({ pressed }) => [
-            styles.detailBookingAction,
-            bookingCreated && styles.detailBookingActionDone,
-            compactLayout && styles.detailBookingActionCompact,
-            pressed && styles.pressed,
-          ]}
-        >
-          <CalendarDays
-            color={colors.surface}
-            size={actionIconSize}
-            strokeWidth={2.4}
+      ) : (
+        <View style={styles.reviewList}>
+          <View style={styles.reviewSummary}>
+            <Text style={styles.reviewSummaryScore}>{vendor.rating}</Text>
+            <View style={styles.reviewSummaryCopy}>
+              <View style={styles.reviewSummaryStars}>
+                {Array.from({ length: 5 }, (_, index) => (
+                  <Star
+                    key={`summary-star-${index}`}
+                    color={colors.gold}
+                    fill={colors.gold}
+                    size={15}
+                    strokeWidth={2}
+                  />
+                ))}
+              </View>
+              <Text style={styles.reviewSummaryText}>
+                {vendor.reviewCount}{' '}
+                {pluralizeRu(vendor.reviewCount, 'отзыв', 'отзыва', 'отзывов')} от реальных клиентов
+              </Text>
+            </View>
+          </View>
+          {vendor.reviewCount > vendor.reviews.length ? (
+            <Text style={styles.profileResultCount}>
+              Показано {vendor.reviews.length} из {vendor.reviewCount} отзывов
+            </Text>
+          ) : null}
+          {vendor.reviews.length ? vendor.reviews.map((review) => (
+            <View key={review.id} style={styles.reviewCard}>
+              <View style={styles.reviewHeader}>
+                <View style={styles.reviewAvatar}>
+                  <Text style={styles.reviewAvatarText}>
+                    {review.author.slice(0, 1)}
+                  </Text>
+                </View>
+                <View style={styles.reviewAuthorBlock}>
+                  <Text style={styles.reviewAuthorName}>{review.author}</Text>
+                  <Text style={styles.reviewDateText}>{review.date}</Text>
+                </View>
+                <View style={styles.reviewRating}>
+                  <Star
+                    color={colors.gold}
+                    fill={colors.gold}
+                    size={15}
+                    strokeWidth={2}
+                  />
+                  <Text style={styles.reviewRatingText}>{review.rating}</Text>
+                </View>
+              </View>
+              <Text style={styles.reviewText}>{review.text}</Text>
+            </View>
+          )) : (
+            <View style={styles.clientEmptyCard}>
+              <Text style={styles.clientEmptyTitle}>Отзывов пока нет</Text>
+              <Text style={styles.clientEmptyText}>
+                Здесь появятся отзывы после подтвержденных броней.
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setBookingCalendarOpen(false)}
+        transparent
+        visible={bookingCalendarOpen}
+      >
+        <View style={styles.detailBookingModal}>
+          <Pressable
+            accessibilityLabel="Закрыть выбор даты"
+            accessibilityRole="button"
+            onPress={() => setBookingCalendarOpen(false)}
+            style={styles.detailBookingBackdrop}
           />
-          <Text
-            style={[
-              styles.detailPrimaryActionText,
-              compactLayout && styles.detailPrimaryActionTextCompact,
-            ]}
-          >
-            {bookingCreated ? 'Заявка отправлена' : 'Отправить заявку на дату'}
-          </Text>
-        </Pressable>
-        <View style={styles.detailModerationRow}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => {
-              onReport();
-              setModerationMessage('Жалоба отправлена на модерацию');
-            }}
-            style={({ pressed }) => [
-              styles.detailModerationButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Flag color="#F0B7B2" size={18} strokeWidth={2.1} />
-            <Text style={styles.detailModerationText}>Пожаловаться</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onBlock}
-            style={({ pressed }) => [
-              styles.detailModerationButton,
-              pressed && styles.pressed,
-            ]}
-          >
-            <EyeOff color="#A7B0BA" size={18} strokeWidth={2.1} />
-            <Text style={styles.detailModerationText}>Скрыть</Text>
-          </Pressable>
-        </View>
-        {moderationMessage ? (
-          <Text style={styles.detailModerationMessage}>{moderationMessage}</Text>
-        ) : null}
-        {bookingCalendarOpen ? (
-          <View style={styles.detailBookingCalendar}>
+          <View style={styles.detailBookingSheet}>
+            <View style={styles.detailBookingSheetHandle} />
+            <ScrollView
+              bounces={false}
+              contentContainerStyle={styles.detailBookingScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <View
+                style={[
+                  styles.detailBookingCalendar,
+                  styles.detailBookingCalendarInSheet,
+                ]}
+              >
             <View style={styles.detailBookingCalendarHeader}>
               <View>
                 <Text style={styles.detailBookingCalendarTitle}>Выберите дату</Text>
@@ -439,26 +758,32 @@ export function VendorDetailScreen({
                 </Text>
               </View>
               <Pressable
+                accessibilityLabel="Закрыть календарь"
                 accessibilityRole="button"
                 onPress={() => setBookingCalendarOpen(false)}
                 style={styles.detailBookingCalendarClose}
               >
-                <Text style={styles.detailBookingCalendarCloseText}>×</Text>
+                <X color={colors.surface} size={20} strokeWidth={2.1} />
               </Pressable>
             </View>
             <View style={styles.calendarMonthNav}>
               <Pressable
+                accessibilityLabel="Предыдущий месяц"
                 accessibilityRole="button"
+                accessibilityState={{ disabled: previousMonthDisabled }}
+                disabled={previousMonthDisabled}
                 onPress={() => changeBookingMonth(-1)}
                 style={({ pressed }) => [
                   styles.calendarNavButton,
+                  previousMonthDisabled && styles.calendarMonthDayPast,
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.calendarNavText}>‹</Text>
+                <ChevronLeft color={colors.surface} size={20} strokeWidth={2.1} />
               </Pressable>
               <Text style={styles.calendarMonth}>{visibleMonthTitle}</Text>
               <Pressable
+                accessibilityLabel="Следующий месяц"
                 accessibilityRole="button"
                 onPress={() => changeBookingMonth(1)}
                 style={({ pressed }) => [
@@ -466,7 +791,7 @@ export function VendorDetailScreen({
                   pressed && styles.pressed,
                 ]}
               >
-                <Text style={styles.calendarNavText}>›</Text>
+                <ChevronRight color={colors.surface} size={20} strokeWidth={2.1} />
               </Pressable>
             </View>
             <View style={styles.weekGrid}>
@@ -494,17 +819,25 @@ export function VendorDetailScreen({
                       visibleBookingMonth.getMonth(),
                       day,
                     );
-                    const dateLabel = formatBookingDate(date);
-                    const selected = selectedBookingDate === dateLabel;
+                    const dateValue = formatIsoDateValue(date);
+                    const selected = selectedBookingDate === dateValue;
                     const isSunday = date.getDay() === 0;
+                    const past = isPastBookingDate(date);
                     return (
                       <Pressable
-                        key={dateLabel}
+                        key={dateValue}
+                        accessibilityLabel={formatBookingDate(date)}
                         accessibilityRole="button"
-                        onPress={() => setSelectedBookingDate(dateLabel)}
+                        accessibilityState={{ disabled: past, selected }}
+                        disabled={past}
+                        onPress={() => {
+                          setSelectedBookingDate(dateValue);
+                          setBookingMessage('');
+                        }}
                         style={({ pressed }) => [
                           styles.calendarMonthDay,
                           isSunday && styles.calendarMonthDaySunday,
+                          past && styles.calendarMonthDayPast,
                           selected && styles.calendarMonthDaySelected,
                           pressed && styles.pressed,
                         ]}
@@ -513,6 +846,7 @@ export function VendorDetailScreen({
                           style={[
                             styles.calendarMonthDayText,
                             isSunday && styles.calendarMonthDayTextSunday,
+                            past && styles.calendarMonthDayTextPast,
                             selected && styles.calendarMonthDayTextSelected,
                           ]}
                         >
@@ -528,23 +862,25 @@ export function VendorDetailScreen({
               <View style={styles.detailBookingTimeField}>
                 <Text style={styles.detailBookingTimeLabel}>С</Text>
                 <TextInput
+                  accessibilityLabel="Время начала бронирования"
                   keyboardType="numbers-and-punctuation"
                   placeholder="18:00"
-                  placeholderTextColor="#6F7A83"
+                  placeholderTextColor="#A8A8A8"
                   style={styles.detailBookingTimeInput}
                   value={selectedTimeFrom}
-                  onChangeText={setSelectedTimeFrom}
+                  onChangeText={(value) => setSelectedTimeFrom(formatBookingTimeInput(value))}
                 />
               </View>
               <View style={styles.detailBookingTimeField}>
                 <Text style={styles.detailBookingTimeLabel}>До</Text>
                 <TextInput
+                  accessibilityLabel="Время окончания бронирования"
                   keyboardType="numbers-and-punctuation"
                   placeholder="23:00"
-                  placeholderTextColor="#6F7A83"
+                  placeholderTextColor="#A8A8A8"
                   style={styles.detailBookingTimeInput}
                   value={selectedTimeTo}
-                  onChangeText={setSelectedTimeTo}
+                  onChangeText={(value) => setSelectedTimeTo(formatBookingTimeInput(value))}
                 />
               </View>
             </View>
@@ -558,14 +894,20 @@ export function VendorDetailScreen({
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityState={{ disabled: Boolean(bookingTimeError) }}
+                disabled={Boolean(bookingTimeError)}
                 onPress={async () => {
                   const created = await onBook(
                     selectedBookingDate,
                     selectedTimeFrom,
                     selectedTimeTo,
                   );
-                  if (!created) {
-                    setBookingMessage('Не удалось отправить заявку. Проверьте сеть.');
+                  if (created !== true) {
+                    setBookingMessage(
+                      typeof created === 'string'
+                        ? created
+                        : 'Не удалось отправить заявку. Проверьте сеть.',
+                    );
                     return;
                   }
 
@@ -573,89 +915,659 @@ export function VendorDetailScreen({
                   setBookingMessage('');
                   setBookingCalendarOpen(false);
                 }}
-                style={styles.detailBookingConfirmButton}
+                style={[
+                  styles.detailBookingConfirmButton,
+                  bookingTimeError ? styles.calendarMonthDayPast : null,
+                ]}
               >
                 <Text style={styles.detailBookingConfirmText}>
-                  Отправить {selectedBookingDate}
+                  Отправить {formatBookingDateValue(selectedBookingDate)}
                 </Text>
               </Pressable>
             </View>
+            {bookingTimeError ? (
+              <Text accessibilityLiveRegion="polite" style={styles.detailModerationMessage}>
+                {bookingTimeError}
+              </Text>
+            ) : null}
             {bookingMessage ? (
               <Text style={styles.detailModerationMessage}>{bookingMessage}</Text>
             ) : null}
+              </View>
+            </ScrollView>
           </View>
-        ) : null}
-      </View>
-      <View
-        style={[styles.profileTabs, compactLayout && styles.profileTabsCompact]}
+        </View>
+      </Modal>
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setStoryViewer(null)}
+        transparent
+        visible={storyViewer !== null}
       >
-        <ProfileTabButton
-          label="Медиа"
-          icon={Camera}
-          active={profileTab === 'media'}
-          compactLayout={compactLayout}
-          onPress={() => setProfileTab('media')}
-        />
-        <ProfileTabButton
-          label="Отзывы"
-          icon={Star}
-          active={profileTab === 'reviews'}
-          compactLayout={compactLayout}
-          onPress={() => setProfileTab('reviews')}
-        />
-      </View>
-      {profileTab === 'media' ? (
-        <View style={styles.profileMediaGrid}>
-          {mediaSources.map((source, index) => (
-            <View key={`${vendor.id}-media-${index}`} style={styles.profileMediaTile}>
+        <View style={styles.profileMediaViewer}>
+          {storyViewer && viewedStory ? (
+            <>
+              <ProfileStoryMedia
+                item={viewedStory}
+                key={viewedStory.uri}
+              />
+              <View style={styles.storyProgressRow}>
+                {viewedStories.map((story, index) => (
+                  <View key={`${story.uri}-${index}`} style={styles.storyProgressItem}>
+                    <View
+                      style={[
+                        styles.storyProgressFill,
+                        { width: index <= viewedStoryIndex ? '100%' : '0%' },
+                      ]}
+                    />
+                  </View>
+                ))}
+              </View>
+              <View style={styles.profileMediaViewerTopBar}>
+                <View style={styles.profileMediaViewerIdentity}>
+                  <Image
+                    accessibilityIgnoresInvertColors
+                    resizeMode="cover"
+                    source={getVendorImageSource(vendor)}
+                    style={styles.profileMediaViewerAvatar}
+                  />
+                  <Text numberOfLines={1} style={styles.profileMediaViewerName}>
+                    {vendor.name} · {viewedStoryLabel}
+                  </Text>
+                </View>
+                <Pressable
+                  accessibilityLabel="Закрыть историю"
+                  accessibilityRole="button"
+                  onPress={() => setStoryViewer(null)}
+                  style={styles.profileMediaViewerClose}
+                >
+                  <X color={colors.surface} size={23} strokeWidth={2.3} />
+                </Pressable>
+              </View>
+              <Pressable
+                accessibilityLabel="Предыдущая история"
+                accessibilityRole="button"
+                onPress={() => changeViewedStory(-1)}
+                style={[styles.profileMediaViewerNav, styles.profileMediaViewerNavLeft]}
+              >
+                <ChevronLeft color={colors.surface} size={28} strokeWidth={2.2} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Следующая история"
+                accessibilityRole="button"
+                onPress={() => changeViewedStory(1)}
+                style={[styles.profileMediaViewerNav, styles.profileMediaViewerNavRight]}
+              >
+                <ChevronRight color={colors.surface} size={28} strokeWidth={2.2} />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+      </Modal>
+      <Modal
+        animationType="slide"
+        onRequestClose={closeProfileMediaViewer}
+        presentationStyle="fullScreen"
+        visible={selectedMediaIndex !== null}
+      >
+        <View style={styles.profileMediaFeed} {...profileMediaEdgeSwipe.panHandlers}>
+          {selectedMediaIndex !== null ? (
+            <FlatList
+              data={viewerMediaItems}
+              decelerationRate="fast"
+              getItemLayout={(_data, index) => ({
+                index,
+                length: height,
+                offset: height * index,
+              })}
+              initialScrollIndex={selectedMediaIndex}
+              initialNumToRender={3}
+              keyExtractor={(item) => item.id}
+              maxToRenderPerBatch={3}
+              onMomentumScrollEnd={(event) => {
+                const nextIndex = Math.max(
+                  0,
+                  Math.min(
+                    viewerMediaItems.length - 1,
+                    Math.round(event.nativeEvent.contentOffset.y / height),
+                  ),
+                );
+                setSelectedMediaIndex(nextIndex);
+                onMediaView?.();
+              }}
+              pagingEnabled
+              renderItem={({ item, index }) => (
+                <ProfileMediaFeedItem
+                  active={index === selectedMediaIndex}
+                  height={height}
+                  isLiked={likedMediaIds.includes(item.id)}
+                  isSaved={savedMediaIds.includes(item.id)}
+                  item={item}
+                  onOpenComments={() => setCommentsMediaIndex(index)}
+                  onOpenLikes={() => void openMediaLikes(index)}
+                  onShare={() =>
+                    void Share.share({
+                      message: `${vendor.name} на SVADBA.kz: ${item.caption || vendor.description}${
+                        item.uri ? `\n${item.uri}` : ''
+                      }`,
+                      title: vendor.name,
+                    }).catch(() => undefined)
+                  }
+                  onToggleLiked={() => onToggleMediaLiked?.(item.id)}
+                  onToggleSaved={() => onToggleMediaSaved?.(item.id)}
+                  vendor={vendor}
+                />
+              )}
+              showsVerticalScrollIndicator={false}
+              removeClippedSubviews={false}
+              windowSize={3}
+            />
+          ) : null}
+          <Pressable
+            accessibilityLabel="Закрыть публикации"
+            accessibilityRole="button"
+            onPress={closeProfileMediaViewer}
+            style={styles.profileMediaFeedClose}
+          >
+            <X color={colors.surface} size={23} strokeWidth={2.3} />
+          </Pressable>
+        </View>
+      </Modal>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setCommentsMediaIndex(null)}
+        transparent
+        visible={commentsMediaIndex !== null}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+          style={styles.mediaCommentsSheet}
+        >
+          <View style={styles.mediaCommentsPanel}>
+            <View style={styles.mediaCommentsHeader}>
+              <Text style={styles.mediaCommentsTitle}>
+                Комментарии {commentsMedia?.commentCount ?? 0}
+              </Text>
+              <View style={styles.mediaCommentsHeaderActions}>
+                {onReportMedia ? (
+                  <Pressable
+                    accessibilityLabel="Пожаловаться на публикацию"
+                    accessibilityRole="button"
+                    onPress={() => void reportSelectedMedia()}
+                    style={styles.mediaCommentsClose}
+                  >
+                    <Flag color={colors.surface} size={20} strokeWidth={2.2} />
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityLabel="Закрыть комментарии"
+                  accessibilityRole="button"
+                  onPress={() => setCommentsMediaIndex(null)}
+                  style={styles.mediaCommentsClose}
+                >
+                  <X color={colors.surface} size={22} strokeWidth={2.2} />
+                </Pressable>
+              </View>
+            </View>
+            <ScrollView
+              automaticallyAdjustKeyboardInsets={false}
+              contentContainerStyle={styles.mediaCommentsList}
+              keyboardShouldPersistTaps="handled"
+            >
+              {commentsMedia?.comments.length ? (
+                commentsMedia.comments.map((comment) => (
+                  <MediaCommentRow
+                    comment={comment}
+                    key={comment.id}
+                    onReport={
+                      onReportComment
+                        ? () => void reportSelectedComment(comment.id)
+                        : undefined
+                    }
+                  />
+                ))
+              ) : (
+                <Text style={styles.profileMediaViewerMeta}>Комментариев пока нет.</Text>
+              )}
+            </ScrollView>
+            <View style={styles.mediaCommentComposer}>
+              <TextInput
+                blurOnSubmit={false}
+                onChangeText={setMediaCommentDraft}
+                onSubmitEditing={submitSelectedMediaComment}
+                placeholder="Написать комментарий"
+                placeholderTextColor="#7E8790"
+                returnKeyType="send"
+                style={styles.mediaCommentInput}
+                value={mediaCommentDraft}
+              />
+              <Pressable
+                accessibilityLabel="Отправить комментарий"
+                accessibilityRole="button"
+                onPress={submitSelectedMediaComment}
+                style={styles.mediaCommentSend}
+              >
+                <Send color={colors.surface} size={19} strokeWidth={2.3} />
+              </Pressable>
+            </View>
+            {mediaCommentStatus ? (
+              <Text style={styles.mediaUploadStatus}>{mediaCommentStatus}</Text>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setLikesMediaIndex(null)}
+        transparent
+        visible={likesMediaIndex !== null}
+      >
+        <View style={styles.mediaCommentsSheet}>
+          <View style={styles.mediaCommentsPanel}>
+            <View style={styles.mediaCommentsHeader}>
+              <Text style={styles.mediaCommentsTitle}>Отметки «Нравится»</Text>
+              <Pressable
+                accessibilityLabel="Закрыть список лайков"
+                accessibilityRole="button"
+                onPress={() => setLikesMediaIndex(null)}
+                style={styles.mediaCommentsClose}
+              >
+                <X color={colors.surface} size={22} strokeWidth={2.2} />
+              </Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.profileMediaLikersList}>
+              {mediaLikersLoading ? (
+                <Text style={styles.profileMediaViewerMeta}>Загрузка...</Text>
+              ) : mediaLikers.length ? (
+                mediaLikers.map((user) => <MediaLikeUserRow key={user.id} user={user} />)
+              ) : (
+                <Text style={styles.profileMediaViewerMeta}>Пока никто не отметил.</Text>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function ProfileStoryMedia({
+  item,
+}: {
+  item?: {
+    source: ImageSourcePropType;
+    type: 'image' | 'video';
+    uri: string;
+  };
+}) {
+  const player = useVideoPlayer(item?.type === 'video' ? item.uri : null, (nextPlayer) => {
+    nextPlayer.loop = true;
+    nextPlayer.muted = false;
+  });
+
+  useEffect(() => {
+    if (item?.type === 'video') {
+      player.play();
+      return () => player.pause();
+    }
+    player.pause();
+    return undefined;
+  }, [item?.type, item?.uri, player]);
+
+  if (!item) return <View style={styles.profileMediaViewerImage} />;
+  if (item.type === 'video') {
+    return (
+      <VideoView
+        contentFit="cover"
+        nativeControls={false}
+        player={player}
+        playsInline
+        style={styles.profileMediaViewerImage}
+        surfaceType="textureView"
+      />
+    );
+  }
+  return (
+    <Image
+      accessibilityIgnoresInvertColors
+      resizeMode="cover"
+      source={item.source}
+      style={styles.profileMediaViewerImage}
+    />
+  );
+}
+
+function ProfileMediaFeedItem({
+  active,
+  height,
+  isLiked,
+  isSaved,
+  item,
+  onOpenComments,
+  onOpenLikes,
+  onShare,
+  onToggleLiked,
+  onToggleSaved,
+  vendor,
+}: {
+  active: boolean;
+  height: number;
+  isLiked: boolean;
+  isSaved: boolean;
+  item: ProfileMediaEntry;
+  onOpenComments: () => void;
+  onOpenLikes: () => void;
+  onShare: () => void;
+  onToggleLiked: () => void;
+  onToggleSaved: () => void;
+  vendor: Vendor;
+}) {
+  const { width: viewportWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const [muted, setMuted] = useState(true);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
+  const [videoStatus, setVideoStatus] = useState<'idle' | 'loading' | 'readyToPlay' | 'error'>(
+    'idle',
+  );
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const player = useVideoPlayer(item.type === 'video' ? item.uri : null, (nextPlayer) => {
+    nextPlayer.loop = true;
+    nextPlayer.muted = true;
+  });
+  const mediaHeight = Math.max(270, Math.min(510, Math.round(height * 0.52)));
+  const carouselUris = item.carouselUris.length ? item.carouselUris : [item.uri];
+  const firstLiker = item.likedByPreview[0];
+  const previewComments = item.comments.slice(0, 3);
+
+  useEventListener(player, 'statusChange', ({ status }) => {
+    setVideoStatus(status);
+    if (active && item.type === 'video' && status === 'readyToPlay') {
+      player.play();
+    }
+  });
+  useEventListener(player, 'playingChange', ({ isPlaying }) => {
+    setVideoPlaying(isPlaying);
+  });
+
+  useEffect(() => {
+    setVideoStatus(player.status);
+    setVideoPlaying(player.playing);
+    setCarouselIndex(0);
+    setCaptionExpanded(false);
+  }, [item.id, player]);
+
+  useEffect(() => {
+    player.muted = muted;
+    if (item.type !== 'video') return;
+    if (active) {
+      if (player.status === 'readyToPlay') {
+        player.play();
+      }
+    } else {
+      player.pause();
+    }
+  }, [active, item.type, muted, player]);
+
+  const toggleVideoPlayback = () => {
+    if (videoStatus === 'error') {
+      setVideoStatus('loading');
+      void player
+        .replaceAsync(item.uri)
+        .then(() => player.play())
+        .catch(() => setVideoStatus('error'));
+      return;
+    }
+    if (videoPlaying) {
+      player.pause();
+    } else {
+      player.play();
+    }
+  };
+
+  return (
+    <View style={[styles.profileMediaFeedPage, { height }]}>
+      <View style={[styles.profileMediaFeedMedia, { height: mediaHeight }]}>
+        {item.type === 'video' ? (
+          <Pressable
+            accessibilityLabel={videoPlaying ? 'Поставить видео на паузу' : 'Воспроизвести видео'}
+            accessibilityRole="button"
+            onPress={toggleVideoPlayback}
+            style={styles.profileMediaFeedMediaContent}
+          >
+            <VideoView
+              contentFit="cover"
+              nativeControls={false}
+              player={player}
+              playsInline
+              style={styles.profileMediaFeedMediaContent}
+              surfaceType="textureView"
+            />
+            {videoStatus === 'loading' || videoStatus === 'idle' ? (
+              <View pointerEvents="none" style={styles.profileMediaFeedVideoState}>
+                <ActivityIndicator color={colors.surface} size="large" />
+              </View>
+            ) : null}
+            {videoStatus === 'readyToPlay' && !videoPlaying ? (
+              <View pointerEvents="none" style={styles.profileMediaFeedVideoState}>
+                <View style={styles.profileMediaFeedPlayButton}>
+                  <Play color={colors.surface} fill={colors.surface} size={28} strokeWidth={2} />
+                </View>
+              </View>
+            ) : null}
+            {videoStatus === 'error' ? (
+              <View pointerEvents="none" style={styles.profileMediaFeedVideoState}>
+                <View style={styles.profileMediaFeedVideoError}>
+                  <Play color={colors.surface} size={25} strokeWidth={2} />
+                  <Text style={styles.profileMediaFeedVideoErrorText}>
+                    Не удалось запустить. Нажмите, чтобы повторить.
+                  </Text>
+                </View>
+              </View>
+            ) : null}
+          </Pressable>
+        ) : carouselUris.length > 1 ? (
+          <FlatList
+            data={carouselUris}
+            decelerationRate="fast"
+            horizontal
+            keyExtractor={(uri, index) => `${item.id}-carousel-${index}-${uri}`}
+            onMomentumScrollEnd={(event) => {
+              setCarouselIndex(
+                Math.max(
+                  0,
+                  Math.min(
+                    carouselUris.length - 1,
+                    Math.round(event.nativeEvent.contentOffset.x / viewportWidth),
+                  ),
+                ),
+              );
+            }}
+            pagingEnabled
+            renderItem={({ item: uri }) => (
               <Image
                 accessibilityIgnoresInvertColors
                 resizeMode="cover"
-                source={source}
-                style={styles.profileMediaImage}
+                source={{ uri }}
+                style={{ height: mediaHeight, width: viewportWidth }}
               />
-              {index % 3 === 0 ? (
-                <View style={styles.profileMediaPlayBadge}>
-                  <Play
-                    color={colors.surface}
-                    fill={colors.surface}
-                    size={15}
-                    strokeWidth={2.4}
-                  />
-                </View>
+            )}
+            showsHorizontalScrollIndicator={false}
+            style={styles.profileMediaFeedMediaContent}
+          />
+        ) : (
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="cover"
+            source={item.source}
+            style={styles.profileMediaFeedMediaContent}
+          />
+        )}
+        {item.type === 'image' && carouselUris.length > 1 ? (
+          <View style={styles.profileMediaFeedCarouselCounter}>
+            <Text style={styles.profileMediaFeedCarouselCounterText}>
+              {carouselIndex + 1}/{carouselUris.length}
+            </Text>
+          </View>
+        ) : null}
+        {item.type === 'video' ? (
+          <Pressable
+            accessibilityLabel={muted ? 'Включить звук' : 'Выключить звук'}
+            accessibilityRole="button"
+            onPress={() => setMuted((value) => !value)}
+            style={styles.profileMediaFeedMute}
+          >
+            {muted ? (
+              <VolumeX color={colors.surface} size={20} strokeWidth={2.2} />
+            ) : (
+              <Volume2 color={colors.surface} size={20} strokeWidth={2.2} />
+            )}
+          </Pressable>
+        ) : null}
+      </View>
+      <View
+        style={[
+          styles.profileMediaFeedBody,
+          { paddingBottom: Math.max(insets.bottom, 10) },
+        ]}
+      >
+        <View style={styles.profileMediaFeedAuthorRow}>
+          <Image
+            accessibilityIgnoresInvertColors
+            source={getVendorImageSource(vendor)}
+            style={styles.profileMediaFeedAuthorAvatar}
+          />
+          <View style={styles.profileMediaFeedAuthorCopy}>
+            <View style={styles.profileMediaFeedAuthorNameRow}>
+              <Text numberOfLines={1} style={styles.profileMediaFeedAuthorName}>
+                {vendor.name}
+              </Text>
+              {vendor.verified ? (
+                <BadgeCheck color="#4A8BFF" fill="#102A5C" size={15} strokeWidth={2.5} />
               ) : null}
             </View>
-          ))}
+            <Text numberOfLines={1} style={styles.profileMediaFeedAuthorMeta}>
+              {vendor.category} · {vendor.city}
+            </Text>
+          </View>
         </View>
-      ) : (
-        <View style={styles.reviewList}>
-          {vendor.reviews.map((review) => (
-            <View key={review.id} style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <View style={styles.reviewAvatar}>
-                  <Text style={styles.reviewAvatarText}>
-                    {review.author.slice(0, 1)}
-                  </Text>
-                </View>
-                <View style={styles.reviewAuthorBlock}>
-                  <Text style={styles.reviewAuthorName}>{review.author}</Text>
-                  <Text style={styles.reviewDateText}>{review.date}</Text>
-                </View>
-                <View style={styles.reviewRating}>
-                  <Star
-                    color={colors.gold}
-                    fill={colors.gold}
-                    size={15}
-                    strokeWidth={2}
-                  />
-                  <Text style={styles.reviewRatingText}>{review.rating}</Text>
-                </View>
+        <View style={styles.profileMediaFeedActions}>
+          <Pressable
+            accessibilityLabel={isLiked ? 'Убрать лайк' : 'Поставить лайк'}
+            accessibilityRole="button"
+            onPress={onToggleLiked}
+            style={styles.profileMediaFeedAction}
+          >
+            <Heart
+              color={isLiked ? '#FF4D67' : colors.surface}
+              fill={isLiked ? '#FF4D67' : 'transparent'}
+              size={27}
+              strokeWidth={2.1}
+            />
+            <Text style={styles.profileMediaFeedActionText}>{item.likeCount}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Открыть комментарии"
+            accessibilityRole="button"
+            onPress={onOpenComments}
+            style={styles.profileMediaFeedAction}
+          >
+            <MessageCircle color={colors.surface} size={27} strokeWidth={2.1} />
+            <Text style={styles.profileMediaFeedActionText}>{item.commentCount}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Поделиться публикацией"
+            accessibilityRole="button"
+            onPress={onShare}
+            style={styles.profileMediaFeedAction}
+          >
+            <Send color={colors.surface} size={27} strokeWidth={2.1} />
+          </Pressable>
+          <View style={styles.profileMediaFeedActionSpacer} />
+          <Pressable
+            accessibilityLabel={isSaved ? 'Убрать публикацию из сохранённых' : 'Сохранить публикацию'}
+            accessibilityRole="button"
+            onPress={onToggleSaved}
+            style={styles.profileMediaFeedAction}
+          >
+            <Bookmark
+              color={colors.surface}
+              fill={isSaved ? colors.surface : 'transparent'}
+              size={27}
+              strokeWidth={2.1}
+            />
+          </Pressable>
+        </View>
+        {item.likeCount > 0 ? (
+          <Pressable
+            accessibilityLabel="Показать всех, кому понравилась публикация"
+            accessibilityRole="button"
+            onPress={onOpenLikes}
+            style={styles.profileMediaLikedByRow}
+          >
+            {firstLiker?.avatarUri ? (
+              <Image source={{ uri: firstLiker.avatarUri }} style={styles.profileMediaLikedByAvatar} />
+            ) : (
+              <View style={styles.profileMediaLikedByAvatarFallback}>
+                <UserRound color={colors.surface} size={15} strokeWidth={2} />
               </View>
-              <Text style={styles.reviewText}>{review.text}</Text>
-            </View>
+            )}
+            <Text numberOfLines={1} style={styles.profileMediaLikedByText}>
+              {firstLiker ? `Нравится ${firstLiker.name}` : `${item.likeCount} отметок «Нравится»`}
+              {firstLiker && item.likeCount > 1 ? ' и другим' : ''}
+            </Text>
+          </Pressable>
+        ) : null}
+        <Pressable
+          accessibilityLabel={captionExpanded ? 'Свернуть описание' : 'Показать описание полностью'}
+          accessibilityRole="button"
+          onPress={() => setCaptionExpanded((value) => !value)}
+        >
+          <Text
+            numberOfLines={captionExpanded ? undefined : 2}
+            style={styles.profileMediaFeedCaption}
+          >
+            <Text style={styles.profileMediaFeedCaptionAuthor}>{vendor.name} </Text>
+            {item.caption || vendor.description}
+          </Text>
+          {(item.caption || vendor.description).length > 80 ? (
+            <Text style={styles.profileMediaFeedCaptionMore}>
+              {captionExpanded ? 'Свернуть' : 'Ещё'}
+            </Text>
+          ) : null}
+        </Pressable>
+        <View style={styles.profileMediaPreviewComments}>
+          {previewComments.map((comment) => (
+            <MediaCommentRow comment={comment} compact key={comment.id} />
           ))}
+          {item.commentCount > 3 ? (
+            <Pressable onPress={onOpenComments} style={styles.profileMediaMoreComments}>
+              <Text style={styles.profileMediaMoreCommentsText}>
+                Посмотреть все комментарии ({item.commentCount})
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function MediaLikeUserRow({ user }: { user: MediaLikeUser }) {
+  const initial = Array.from(user.name || 'П')[0]?.toLocaleUpperCase('ru-RU') || 'П';
+  return (
+    <View style={styles.profileMediaLikerRow}>
+      {user.avatarUri ? (
+        <Image source={{ uri: user.avatarUri }} style={styles.profileMediaLikerAvatar} />
+      ) : (
+        <View style={styles.profileMediaLikerAvatarFallback}>
+          <Text style={styles.profileMediaLikerInitial}>{initial}</Text>
         </View>
       )}
+      <Text numberOfLines={1} style={styles.profileMediaLikerName}>
+        {user.name}
+      </Text>
     </View>
   );
 }
@@ -666,12 +1578,13 @@ function getDefaultBookingDate(availability: string) {
     .replace('Свободна ', '')
     .replace('Свободны ', '')
     .trim();
-  return cleaned || '7 сентября';
+  const parsed = /\d/.test(cleaned) ? getFutureDateFromBookingLabel(cleaned) : null;
+  return formatIsoDateValue(parsed ?? new Date());
 }
 
 function getDefaultBookingMonth(availability: string) {
-  const parsed = parseBookingLabel(getDefaultBookingDate(availability));
-  return new Date(2026, parsed.month, 1);
+  const parsed = parseIsoDateValue(getDefaultBookingDate(availability)) ?? new Date();
+  return new Date(parsed.getFullYear(), parsed.getMonth(), 1);
 }
 
 function parseBookingLabel(label: string) {
@@ -690,9 +1603,62 @@ function parseBookingLabel(label: string) {
     'декабря',
   ];
   const [dayRaw, monthRaw = 'сентября'] = label.toLowerCase().split(/\s+/);
-  const day = Number(dayRaw) || 7;
+  const day = Number(dayRaw) || new Date().getDate();
   const monthIndex = monthNames.indexOf(monthRaw);
-  return { day, month: monthIndex >= 0 ? monthIndex : 8 };
+  const month = monthIndex >= 0 ? monthIndex : new Date().getMonth();
+  const futureDate = getFutureDateFromBookingParts(day, month);
+  return { day: futureDate.getDate(), month: futureDate.getMonth(), year: futureDate.getFullYear() };
+}
+
+function getFutureDateFromBookingLabel(label: string) {
+  const parsed = parseBookingParts(label);
+  if (!parsed) return null;
+  return getFutureDateFromBookingParts(parsed.day, parsed.month);
+}
+
+function parseBookingParts(label: string) {
+  const monthNames = [
+    'января',
+    'февраля',
+    'марта',
+    'апреля',
+    'мая',
+    'июня',
+    'июля',
+    'августа',
+    'сентября',
+    'октября',
+    'ноября',
+    'декабря',
+  ];
+  const [dayRaw, monthRaw = ''] = label.toLowerCase().split(/\s+/);
+  const day = Number(dayRaw);
+  const month = monthNames.indexOf(monthRaw);
+  if (!day || month < 0) return null;
+  return { day, month };
+}
+
+function getFutureDateFromBookingParts(day: number, month: number) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  let date = new Date(today.getFullYear(), month, day);
+  date.setHours(0, 0, 0, 0);
+  if (date < today) {
+    date = new Date(today);
+    date.setDate(today.getDate() + 8);
+  }
+  return date;
+}
+
+function getDisplayAvailability(availability: string) {
+  const cleaned = availability
+    .replace('Свободен ', '')
+    .replace('Свободна ', '')
+    .replace('Свободны ', '')
+    .trim();
+  const date = /\d/.test(cleaned) ? getFutureDateFromBookingLabel(cleaned) : null;
+  if (!date) return 'Проверить даты';
+  return `Свободен ${formatBookingDate(date)}`;
 }
 
 function getMonthTitle(date: Date) {
@@ -731,6 +1697,55 @@ function formatBookingDate(date: Date) {
   return `${date.getDate()} ${monthNames[date.getMonth()]}`;
 }
 
+function formatIsoDateValue(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function parseIsoDateValue(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatBookingDateValue(value: string) {
+  const date = parseIsoDateValue(value);
+  return date ? formatBookingDate(date) : value;
+}
+
+function isPastBookingDate(date: Date) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const candidate = new Date(date);
+  candidate.setHours(0, 0, 0, 0);
+  return candidate < today;
+}
+
+function isPastBookingMonth(date: Date) {
+  const today = new Date();
+  return (
+    date.getFullYear() < today.getFullYear() ||
+    (date.getFullYear() === today.getFullYear() && date.getMonth() <= today.getMonth())
+  );
+}
+
+function formatBookingTimeInput(value: string) {
+  const digits = value.replace(/\D/g, '').slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}:${digits.slice(2)}` : digits;
+}
+
+function getBookingTimeError(timeFrom: string, timeTo: string) {
+  const parse = (value: string) => {
+    const match = value.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  };
+  const from = parse(timeFrom);
+  const to = parse(timeTo);
+  if (from === null || to === null) return 'Укажите время в формате ЧЧ:ММ.';
+  if (from >= to) return 'Время начала должно быть раньше окончания.';
+  return '';
+}
+
 function getBookingCalendarRows(monthDate: Date) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
@@ -755,13 +1770,11 @@ function ProfileTabButton({
   label,
   icon: Icon,
   active,
-  compactLayout,
   onPress,
 }: {
   label: string;
   icon: LucideIcon;
   active: boolean;
-  compactLayout: boolean;
   onPress: () => void;
 }) {
   return (
@@ -770,26 +1783,16 @@ function ProfileTabButton({
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
-        styles.profileTabButton,
-        compactLayout && styles.profileTabButtonCompact,
-        active && styles.profileTabButtonActive,
+        styles.profileIconTabButton,
+        active && styles.profileIconTabButtonActive,
         pressed && styles.pressed,
       ]}
     >
       <Icon
         color={active ? colors.surface : colors.muted}
-        size={compactLayout ? 22 : 24}
-        strokeWidth={2.45}
+        size={24}
+        strokeWidth={2.25}
       />
-      <Text
-        style={[
-          styles.profileTabText,
-          compactLayout && styles.profileTabTextCompact,
-          active && styles.profileTabTextActive,
-        ]}
-      >
-        {label}
-      </Text>
     </Pressable>
   );
 }

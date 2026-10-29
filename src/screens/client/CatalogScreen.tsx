@@ -1,30 +1,43 @@
 import type { LucideIcon } from 'lucide-react-native';
+import { useEventListener } from 'expo';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import {
   BadgeCheck,
   Bookmark,
   Check,
+  Flag,
   Grid2X2,
   Heart,
   MessageCircle,
+  Send,
   Play,
   Share2,
+  Volume2,
+  VolumeX,
+  X,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  ActivityIndicator,
   Easing,
   Image,
-  Linking,
+  KeyboardAvoidingView,
+  Modal,
   PanResponder,
+  Platform,
   Pressable,
-  ScrollView,
   Share,
   Text,
+  TextInput,
   View,
   useWindowDimensions,
 } from 'react-native';
 
-import { getVendorImageSource } from '../../data/vendorImages';
+import { KeyboardSafeScrollView as ScrollView } from '../../components/KeyboardSafeScrollView';
+import { getCategoryImageSource, getVendorImageSource } from '../../data/vendorImages';
+import { MediaCommentRow } from '../../components/MediaCommentRow';
+import { useBottomNavigationLayout } from '../../components/AppLayout';
 import { colors, styles } from '../../theme/styles';
 import type { Vendor } from '../../types';
 import { getFeaturedVisualStyle, sortFeaturedFirst } from '../../utils/featured';
@@ -43,8 +56,14 @@ export function CatalogScreen({
   mode,
   initialShortsCategories = [],
   initialShortsOpen = false,
+  likedMediaIds,
   savedVendorIds,
+  onSubmitMediaComment,
+  onReportComment,
+  onReportMedia,
+  onToggleMediaLiked,
   onOpenVendor,
+  onOpenReviews,
   onToggleSaved,
 }: {
   vendors: Vendor[];
@@ -52,8 +71,14 @@ export function CatalogScreen({
   mode: CatalogMode;
   initialShortsCategories?: string[];
   initialShortsOpen?: boolean;
+  likedMediaIds: string[];
   savedVendorIds: string[];
+  onSubmitMediaComment: (vendorId: string, mediaId: string, text: string) => Promise<boolean>;
+  onReportComment: (vendorId: string, mediaId: string, commentId: string) => Promise<boolean>;
+  onReportMedia: (vendorId: string, mediaId: string) => Promise<boolean>;
+  onToggleMediaLiked: (vendorId: string, mediaId: string) => void;
   onOpenVendor: (vendor: Vendor) => void;
+  onOpenReviews: (vendor: Vendor) => void;
   onToggleSaved: (vendorId: string) => void;
 }) {
   const { width } = useWindowDimensions();
@@ -62,7 +87,7 @@ export function CatalogScreen({
     initialShortsCategories,
   );
   const [choiceIndex, setChoiceIndex] = useState(0);
-  const [likedVendorIds, setLikedVendorIds] = useState<string[]>([]);
+  const [activeVendorId, setActiveVendorId] = useState<string | null>(null);
   const visibleVendors = useMemo(() => {
     const scopedVendors =
       activeCategories.length === 0
@@ -71,25 +96,35 @@ export function CatalogScreen({
 
     return sortFeaturedFirst(scopedVendors);
   }, [activeCategories, vendors]);
-  const currentVendor = visibleVendors[choiceIndex] ?? null;
+  const activeVendorIndex = activeVendorId
+    ? visibleVendors.findIndex((vendor) => vendor.id === activeVendorId)
+    : -1;
+  const safeChoiceIndex =
+    activeVendorIndex >= 0
+      ? activeVendorIndex
+      : Math.min(choiceIndex, Math.max(visibleVendors.length - 1, 0));
+  const currentVendor = visibleVendors[safeChoiceIndex] ?? null;
   const compactLayout = width <= 430;
 
   useEffect(() => {
     if (mode === 'feed') {
       setActiveCategories(initialShortsCategories.length ? initialShortsCategories : []);
       setChoiceIndex(0);
+      setActiveVendorId(null);
       setShortsOpen(true);
       return;
     }
 
     setActiveCategories([]);
     setChoiceIndex(0);
+    setActiveVendorId(null);
     setShortsOpen(false);
   }, [mode]);
 
   useEffect(() => {
     setChoiceIndex(0);
-  }, [activeCategories, vendors]);
+    setActiveVendorId(null);
+  }, [activeCategories]);
 
   useEffect(() => {
     if (choiceIndex >= visibleVendors.length) {
@@ -97,41 +132,43 @@ export function CatalogScreen({
     }
   }, [choiceIndex, visibleVendors.length]);
 
+  useEffect(() => {
+    if (shortsOpen && !activeVendorId && currentVendor) {
+      setActiveVendorId(currentVendor.id);
+    }
+  }, [activeVendorId, currentVendor, shortsOpen]);
+
   const openShortsCategories = (selectedCategories: string[]) => {
     setActiveCategories(selectedCategories);
     setChoiceIndex(0);
+    setActiveVendorId(null);
     setShortsOpen(true);
   };
 
   const backToCategoryChoices = () => {
     setActiveCategories([]);
     setChoiceIndex(0);
+    setActiveVendorId(null);
     setShortsOpen(false);
   };
 
   const showNextVendor = () => {
-    setChoiceIndex((current) =>
+    const nextIndex =
       visibleVendors.length === 0
         ? 0
-        : Math.min(current + 1, visibleVendors.length),
-    );
+        : Math.min(safeChoiceIndex + 1, visibleVendors.length - 1);
+    setChoiceIndex(nextIndex);
+    setActiveVendorId(visibleVendors[nextIndex]?.id ?? null);
   };
 
   const showPreviousVendor = () => {
-    setChoiceIndex((current) => Math.max(current - 1, 0));
+    const nextIndex = Math.max(safeChoiceIndex - 1, 0);
+    setChoiceIndex(nextIndex);
+    setActiveVendorId(visibleVendors[nextIndex]?.id ?? null);
   };
 
   const saveVendor = (vendor: Vendor) => {
-    if (!savedVendorIds.includes(vendor.id)) {
-      onToggleSaved(vendor.id);
-    }
-  };
-  const toggleLikeVendor = (vendor: Vendor) => {
-    setLikedVendorIds((current) =>
-      current.includes(vendor.id)
-        ? current.filter((id) => id !== vendor.id)
-        : [...current, vendor.id],
-    );
+    onToggleSaved(vendor.id);
   };
   const shareVendor = (vendor: Vendor) => {
     void Share.share({
@@ -145,58 +182,58 @@ export function CatalogScreen({
       <View style={styles.catalogFullscreenHost}>
         <ShortsVendorViewer
           vendor={currentVendor}
-          isLiked={likedVendorIds.includes(currentVendor.id)}
+          likedMediaIds={likedMediaIds}
           isSaved={savedVendorIds.includes(currentVendor.id)}
-          currentIndex={choiceIndex + 1}
+          currentIndex={safeChoiceIndex + 1}
           totalCount={visibleVendors.length}
           onBackToCategories={backToCategoryChoices}
-          onContact={() => openWhatsApp(currentVendor)}
+          onOpenReviews={() => onOpenReviews(currentVendor)}
           compactLayout={compactLayout}
           onNext={showNextVendor}
           onOpen={() => onOpenVendor(currentVendor)}
           onPrevious={showPreviousVendor}
-          onLike={() => toggleLikeVendor(currentVendor)}
+          onMediaLike={(mediaId) => onToggleMediaLiked(currentVendor.id, mediaId)}
+          onSubmitMediaComment={(mediaId, text) =>
+            onSubmitMediaComment(currentVendor.id, mediaId, text)
+          }
+          onReportComment={(mediaId, commentId) =>
+            onReportComment(currentVendor.id, mediaId, commentId)
+          }
+          onReportMedia={(mediaId) => onReportMedia(currentVendor.id, mediaId)}
           onSave={() => saveVendor(currentVendor)}
           onShare={() => shareVendor(currentVendor)}
+          preloadUrls={[
+            ...getVendorVideoUrls(visibleVendors[safeChoiceIndex - 1] ?? currentVendor),
+            ...getVendorVideoUrls(visibleVendors[safeChoiceIndex + 1] ?? currentVendor),
+          ].filter((url) => url !== getVendorVideoUrls(currentVendor)[0]).slice(0, 2)}
         />
       </View>
     );
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.minimalCatalogContent}>
       <CategoryChoiceGrid
         categories={categories}
         compactLayout={compactLayout}
-        vendors={vendors}
         onStartShorts={openShortsCategories}
       />
-    </ScrollView>
   );
 }
 
 function CategoryChoiceGrid({
   categories,
   compactLayout,
-  vendors,
   onStartShorts,
 }: {
   categories: string[];
   compactLayout: boolean;
-  vendors: Vendor[];
   onStartShorts: (categories: string[]) => void;
 }) {
-  const availableCategories = useMemo(
-    () =>
-      categories.filter((category) =>
-        vendors.some(
-          (vendor) =>
-            vendor.category === category && getVendorVideoUrls(vendor).length > 0,
-        ),
-      ),
-    [categories, vendors],
-  );
+  const { width } = useWindowDimensions();
+  const { bottomBarHeight } = useBottomNavigationLayout();
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const categoryCardWidth: `${number}%` =
+    width >= 1080 ? '24.2%' : width >= 700 ? '32.45%' : '48.55%';
 
   const toggleCategory = (category: string) => {
     setSelectedCategories((current) =>
@@ -210,113 +247,62 @@ function CategoryChoiceGrid({
 
   return (
     <View style={styles.categoryChoiceWrap}>
-      <View style={styles.categoryChoiceIntro}>
-        <Text style={styles.categoryChoiceHeaderTitle}>Что ищете?</Text>
-        <Text style={styles.categoryChoiceHeaderMeta}>
-          Выберите одно или несколько направлений
-        </Text>
-      </View>
-      <View style={styles.categoryChoiceGrid}>
-        {availableCategories.map((category) => {
-          const categoryVendors = sortFeaturedFirst(
-            vendors.filter(
-              (vendor) =>
-                vendor.category === category &&
-                getVendorVideoUrls(vendor).length > 0,
-            ),
-          );
-          const previewVendor = categoryVendors[0];
-          const isSelected = selectedCategories.includes(category);
-          const featuredVisual = getFeaturedVisualStyle(previewVendor.featured);
+      <ScrollView
+        bottomOverlayHeight={64}
+        reserveBottomNavigation
+        contentContainerStyle={styles.categoryChoiceScrollContent}
+      >
+        <View style={styles.categoryChoiceIntro}>
+          <Text style={styles.categoryChoiceHeaderTitle}>Что ищете?</Text>
+          <Text style={styles.categoryChoiceHeaderMeta}>
+            Выберите одно или несколько направлений
+          </Text>
+        </View>
+        <View style={styles.categoryChoiceGrid}>
+          {categories.map((category) => {
+            const isSelected = selectedCategories.includes(category);
 
-          return (
-            <Pressable
-              key={category}
-              accessibilityRole="button"
-              onPress={() => toggleCategory(category)}
-              style={({ pressed }) => [
-                styles.categoryChoiceCard,
-                compactLayout && styles.categoryChoiceCardCompact,
-                isSelected && styles.categoryChoiceCardSelected,
-                pressed && styles.pressed,
-              ]}
-            >
-              <CategoryVideoCover
-                compactLayout={compactLayout}
-                vendor={previewVendor}
-              />
-              <View style={styles.categoryChoiceShade} />
-              {previewVendor.featured?.enabled && featuredVisual ? (
-                <View
-                  style={[
-                    styles.categoryFeaturedBadge,
-                    compactLayout && styles.categoryFeaturedBadgeCompact,
-                    {
-                      backgroundColor: featuredVisual.badgeBackground,
-                      borderColor: featuredVisual.badgeBorder,
-                    },
-                  ]}
-                >
+            return (
+              <Pressable
+                key={category}
+                accessibilityRole="button"
+                accessibilityLabel={category}
+                onPress={() => toggleCategory(category)}
+                style={({ pressed }) => [
+                  styles.categoryChoiceCard,
+                  { width: categoryCardWidth },
+                  compactLayout && styles.categoryChoiceCardCompact,
+                  isSelected && styles.categoryChoiceCardSelected,
+                  pressed && styles.pressed,
+                ]}
+              >
+                <CategoryVideoCover category={category} />
+                <View style={styles.categoryChoiceLabelPill}>
                   <Text
-                    numberOfLines={1}
-                    style={[
-                      styles.categoryFeaturedBadgeText,
-                      compactLayout && styles.categoryFeaturedBadgeTextCompact,
-                      { color: featuredVisual.badgeText },
-                    ]}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.72}
+                    numberOfLines={2}
+                    style={styles.categoryChoiceLabelText}
                   >
-                    {previewVendor.featured.badgeText}
+                    {category}
                   </Text>
                 </View>
-              ) : null}
-              <View
-                style={[
-                  styles.categoryChoiceCheck,
-                  isSelected && styles.categoryChoiceCheckSelected,
-                ]}
-              >
-                {isSelected ? (
-                  <Check color={colors.surface} size={18} strokeWidth={3} />
-                ) : null}
-              </View>
-              <View
-                style={[
-                  styles.categoryChoiceCopy,
-                  compactLayout && styles.categoryChoiceCopyCompact,
-                ]}
-              >
-                <Text
-                  numberOfLines={2}
+                <View
                   style={[
-                    styles.categoryChoiceTitle,
-                    compactLayout && styles.categoryChoiceTitleCompact,
+                    styles.categoryChoiceCheck,
+                    isSelected && styles.categoryChoiceCheckSelected,
                   ]}
                 >
-                  {category}
-                </Text>
-                <Text
-                  numberOfLines={1}
-                  style={[
-                    styles.categoryChoiceVendor,
-                    compactLayout && styles.categoryChoiceVendorCompact,
-                  ]}
-                >
-                  {previewVendor.name}
-                </Text>
-                <Text
-                  style={[
-                    styles.categoryChoiceMeta,
-                    compactLayout && styles.categoryChoiceMetaCompact,
-                  ]}
-                >
-                  {formatVendorCount(categoryVendors.length)}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-      <View style={styles.categoryChoiceFooter}>
+                  {isSelected ? (
+                    <Check color={colors.surface} size={18} strokeWidth={3} />
+                  ) : null}
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+      <View style={[styles.categoryChoiceFooter, { bottom: bottomBarHeight }]}>
         <Pressable
           accessibilityRole="button"
           disabled={!canStart}
@@ -328,9 +314,11 @@ function CategoryChoiceGrid({
           ]}
         >
           <Text style={styles.categoryChoiceNextText}>Смотреть</Text>
-          <Text style={styles.categoryChoiceNextCount}>
-            {canStart ? String(selectedCategories.length) : '0'}
-          </Text>
+          <View style={styles.categoryChoiceNextCountBadge}>
+            <Text style={styles.categoryChoiceNextCountText}>
+              {canStart ? String(selectedCategories.length) : '0'}
+            </Text>
+          </View>
         </Pressable>
       </View>
     </View>
@@ -338,16 +326,15 @@ function CategoryChoiceGrid({
 }
 
 function CategoryVideoCover({
-  vendor,
+  category,
 }: {
-  compactLayout: boolean;
-  vendor: Vendor;
+  category: string;
 }) {
   return (
     <Image
       accessibilityIgnoresInvertColors
       resizeMode="cover"
-      source={getVendorImageSource(vendor)}
+      source={getCategoryImageSource(category)}
       style={styles.categoryChoiceImage}
     />
   );
@@ -355,52 +342,75 @@ function CategoryVideoCover({
 
 function ShortsVendorViewer({
   vendor,
-  isLiked,
+  likedMediaIds,
   isSaved,
   currentIndex,
   totalCount,
   onBackToCategories,
-  onContact,
+  onOpenReviews,
   compactLayout,
   onNext,
   onOpen,
   onPrevious,
-  onLike,
+  onMediaLike,
   onSave,
   onShare,
+  onSubmitMediaComment,
+  onReportComment,
+  onReportMedia,
+  preloadUrls,
 }: {
   vendor: Vendor;
-  isLiked: boolean;
+  likedMediaIds: string[];
   isSaved: boolean;
   currentIndex: number;
   totalCount: number;
   onBackToCategories: () => void;
-  onContact: () => void;
+  onOpenReviews: () => void;
   compactLayout: boolean;
   onNext: () => void;
   onOpen: () => void;
   onPrevious: () => void;
-  onLike: () => void;
+  onMediaLike: (mediaId: string) => void;
   onSave: () => void;
   onShare: () => void;
+  onSubmitMediaComment: (mediaId: string, text: string) => Promise<boolean>;
+  onReportComment: (mediaId: string, commentId: string) => Promise<boolean>;
+  onReportMedia: (mediaId: string) => Promise<boolean>;
+  preloadUrls: string[];
 }) {
+  const { bottomBarHeight } = useBottomNavigationLayout();
   const isFirst = currentIndex === 1;
   const isLast = currentIndex >= totalCount;
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
-  const videoUrls =
-    vendor.shortVideoUrls && vendor.shortVideoUrls.length > 0
-      ? vendor.shortVideoUrls
-      : vendor.shortVideoUrl
-        ? [vendor.shortVideoUrl]
-        : [];
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [commentStatus, setCommentStatus] = useState('');
+  const videoUrls = getVendorVideoUrls(vendor);
   const activeCarouselIndex =
     videoUrls.length > 0 ? Math.min(carouselIndex, videoUrls.length - 1) : 0;
   const activeVideoUrl = videoUrls[activeCarouselIndex] ?? null;
+  const activeMediaId = getVendorShortMediaId(vendor, activeCarouselIndex);
+  const activeMediaItem = vendor.media?.find((item) => item.id === activeMediaId);
+  const activeMediaStats =
+    vendor.mediaStats?.[activeMediaId] ??
+    activeMediaItem ??
+    { commentCount: 0, comments: [], likeCount: 0 };
+  const activeMediaBaseLikeCount = activeMediaItem ? 0 : getVendorLikeCount(vendor);
+  const activeMediaLikeCount = Math.max(
+    0,
+    activeMediaBaseLikeCount + Number(activeMediaStats.likeCount || 0),
+  );
+  const activeMediaComments = activeMediaStats.comments || [];
+  const activeMediaCommentCount = Number(
+    activeMediaStats.commentCount ?? activeMediaComments.length,
+  );
+  const activeMediaLiked = likedMediaIds.includes(activeMediaId);
   const hasCarousel = videoUrls.length > 1;
-  const topIconSize = compactLayout ? 24 : 31;
-  const actionIconSize = compactLayout ? 34 : 46;
-  const verifiedIconSize = compactLayout ? 25 : 36;
+  const topIconSize = 24;
+  const actionIconSize = 24;
+  const verifiedIconSize = compactLayout ? 14 : 16;
   const featuredVisual = getFeaturedVisualStyle(vendor.featured);
   const swipeTranslate = useRef(new Animated.ValueXY({ x: 0, y: 0 })).current;
   const swipeOpacity = useRef(new Animated.Value(1)).current;
@@ -425,7 +435,42 @@ function ShortsVendorViewer({
   useEffect(() => {
     setCarouselIndex(0);
     setDescriptionExpanded(false);
+    setCommentsOpen(false);
+    setCommentDraft('');
+    setCommentStatus('');
   }, [vendor.id]);
+
+  useEffect(() => {
+    setCommentsOpen(false);
+    setCommentDraft('');
+    setCommentStatus('');
+  }, [activeMediaId]);
+
+  const submitComment = async () => {
+    const text = commentDraft.trim();
+    if (!text) {
+      setCommentStatus('Напишите комментарий');
+      return;
+    }
+    setCommentStatus('Отправляем...');
+    const saved = await onSubmitMediaComment(activeMediaId, text);
+    setCommentStatus(saved ? 'Комментарий добавлен' : 'Не удалось отправить');
+    if (saved) {
+      setCommentDraft('');
+    }
+  };
+
+  const reportMedia = async () => {
+    setCommentStatus('Отправляем жалобу...');
+    const saved = await onReportMedia(activeMediaId);
+    setCommentStatus(saved ? 'Жалоба отправлена' : 'Не удалось отправить жалобу');
+  };
+
+  const reportComment = async (commentId: string) => {
+    setCommentStatus('Отправляем жалобу...');
+    const saved = await onReportComment(activeMediaId, commentId);
+    setCommentStatus(saved ? 'Жалоба отправлена' : 'Не удалось отправить жалобу');
+  };
 
   const resetSwipePosition = useCallback(() => {
     Animated.parallel([
@@ -448,23 +493,24 @@ function ShortsVendorViewer({
   const animateSwipeTransition = useCallback(
     ({
       onComplete,
-      startValue,
       targetValue,
     }: {
       onComplete: () => void;
-      startValue: { x: number; y: number };
       targetValue: { x: number; y: number };
     }) => {
       Animated.parallel([
         Animated.timing(swipeTranslate, {
-          toValue: targetValue,
-          duration: 180,
+          toValue: {
+            x: targetValue.x * 0.06,
+            y: targetValue.y * 0.06,
+          },
+          duration: 150,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
         Animated.timing(swipeOpacity, {
-          toValue: 0.74,
-          duration: 160,
+          toValue: 0.92,
+          duration: 140,
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
@@ -474,8 +520,8 @@ function ShortsVendorViewer({
         }
 
         onComplete();
-        swipeTranslate.setValue(startValue);
-        swipeOpacity.setValue(0.82);
+        swipeTranslate.setValue({ x: 0, y: 0 });
+        swipeOpacity.setValue(0.94);
         resetSwipePosition();
       });
     },
@@ -487,7 +533,6 @@ function ShortsVendorViewer({
       if (deltaY < -SHORTS_SWIPE_THRESHOLD && !isLast) {
         animateSwipeTransition({
           onComplete: onNext,
-          startValue: { x: 0, y: SHORTS_VERTICAL_EXIT },
           targetValue: { x: 0, y: -SHORTS_VERTICAL_EXIT },
         });
         return;
@@ -496,7 +541,6 @@ function ShortsVendorViewer({
       if (deltaY > SHORTS_SWIPE_THRESHOLD && !isFirst) {
         animateSwipeTransition({
           onComplete: onPrevious,
-          startValue: { x: 0, y: -SHORTS_VERTICAL_EXIT },
           targetValue: { x: 0, y: SHORTS_VERTICAL_EXIT },
         });
         return;
@@ -531,7 +575,6 @@ function ShortsVendorViewer({
         if (deltaX < 0) {
           animateSwipeTransition({
             onComplete: showNextCarouselItem,
-            startValue: { x: SHORTS_HORIZONTAL_EXIT, y: 0 },
             targetValue: { x: -SHORTS_HORIZONTAL_EXIT, y: 0 },
           });
           return true;
@@ -539,7 +582,6 @@ function ShortsVendorViewer({
 
         animateSwipeTransition({
           onComplete: showPreviousCarouselItem,
-          startValue: { x: -SHORTS_HORIZONTAL_EXIT, y: 0 },
           targetValue: { x: SHORTS_HORIZONTAL_EXIT, y: 0 },
         });
         return true;
@@ -618,12 +660,15 @@ function ShortsVendorViewer({
       <Animated.View
         style={[styles.shortsAnimatedScene, shortsSceneAnimatedStyle]}
       >
-        <Image
-          accessibilityIgnoresInvertColors
-          resizeMode="cover"
-          source={getVendorImageSource(vendor)}
-          style={styles.shortsMedia}
+        <ShortsMediaSurface
+          bottomInset={bottomBarHeight}
+          fallbackSource={getVendorImageSource(vendor)}
+          key={`${vendor.id}-${activeVideoUrl || 'image'}`}
+          uri={activeVideoUrl}
         />
+        {preloadUrls.map((url) => (
+          <ShortsVideoPreloader key={url} uri={url} />
+        ))}
         <View style={styles.shortsShade} />
         <View
           {...shortsPanResponder.panHandlers}
@@ -640,6 +685,7 @@ function ShortsVendorViewer({
           ]}
         >
           <Pressable
+            accessibilityLabel="Вернуться к категориям"
             accessibilityRole="button"
             onPress={safelyBackToCategories}
             style={({ pressed }) => [
@@ -681,7 +727,7 @@ function ShortsVendorViewer({
             <Play
               color={colors.surface}
               fill={colors.surface}
-              size={36}
+              size={32}
               strokeWidth={2.8}
             />
           </View>
@@ -691,6 +737,7 @@ function ShortsVendorViewer({
           style={[
             styles.shortsActionRail,
             compactLayout && styles.shortsActionRailCompact,
+            { bottom: bottomBarHeight + 64 },
           ]}
         >
           <Pressable
@@ -719,21 +766,30 @@ function ShortsVendorViewer({
             />
           </Pressable>
           <ShortsAction
+            accessibilityLabel={
+              activeMediaLiked
+                ? `Убрать лайк с видео. Лайков: ${activeMediaLikeCount}`
+                : `Поставить лайк видео. Лайков: ${activeMediaLikeCount}`
+            }
             icon={Heart}
-            label={String(vendor.reviewCount)}
-            active={isLiked}
+            label={String(activeMediaLikeCount)}
+            active={activeMediaLiked}
             compactLayout={compactLayout}
             iconSize={actionIconSize}
-            onPress={onLike}
+            onPress={() => onMediaLike(activeMediaId)}
           />
           <ShortsAction
+            accessibilityLabel={`Открыть комментарии видео. Комментариев: ${activeMediaCommentCount}`}
             icon={MessageCircle}
-            label={String(vendor.reviews.length)}
+            label={String(activeMediaCommentCount)}
             compactLayout={compactLayout}
             iconSize={actionIconSize}
-            onPress={onContact}
+            onPress={() => setCommentsOpen(true)}
           />
           <ShortsAction
+            accessibilityLabel={
+              isSaved ? 'Убрать из избранного' : 'Добавить в избранное'
+            }
             icon={Bookmark}
             active={isSaved}
             compactLayout={compactLayout}
@@ -741,6 +797,7 @@ function ShortsVendorViewer({
             onPress={onSave}
           />
           <ShortsAction
+            accessibilityLabel="Поделиться подрядчиком"
             icon={Share2}
             compactLayout={compactLayout}
             iconSize={actionIconSize}
@@ -752,6 +809,7 @@ function ShortsVendorViewer({
           style={[
             styles.shortsCaption,
             compactLayout && styles.shortsCaptionCompact,
+            { bottom: bottomBarHeight + 12 },
           ]}
         >
           <Pressable
@@ -824,14 +882,178 @@ function ShortsVendorViewer({
             >
               {vendor.description}
             </Text>
+            {vendor.description.length > 80 ? (
+              <Text style={styles.shortsDescriptionMore}>
+                {descriptionExpanded ? 'Свернуть' : 'Ещё'}
+              </Text>
+            ) : null}
           </Pressable>
         </View>
       </Animated.View>
+      <Modal
+        animationType="slide"
+        onRequestClose={() => setCommentsOpen(false)}
+        transparent
+        visible={commentsOpen}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+          style={styles.mediaCommentsSheet}
+        >
+          <View style={styles.mediaCommentsPanel}>
+            <View style={styles.mediaCommentsHeader}>
+              <Text style={styles.mediaCommentsTitle}>Комментарии к видео</Text>
+              <View style={styles.mediaCommentsHeaderActions}>
+                <Pressable
+                  accessibilityLabel="Пожаловаться на публикацию"
+                  accessibilityRole="button"
+                  onPress={reportMedia}
+                  style={styles.mediaCommentsClose}
+                >
+                  <Flag color={colors.surface} size={20} strokeWidth={2.2} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Закрыть комментарии"
+                  onPress={() => setCommentsOpen(false)}
+                  style={styles.mediaCommentsClose}
+                >
+                  <X color={colors.surface} size={22} strokeWidth={2.2} />
+                </Pressable>
+              </View>
+            </View>
+            <ScrollView
+              automaticallyAdjustKeyboardInsets={false}
+              contentContainerStyle={styles.mediaCommentsList}
+              keyboardShouldPersistTaps="handled"
+            >
+              {activeMediaComments.length ? (
+                activeMediaComments.map((comment) => (
+                  <MediaCommentRow
+                    comment={comment}
+                    key={comment.id}
+                    onReport={() => void reportComment(comment.id)}
+                  />
+                ))
+              ) : (
+                <View style={styles.clientEmptyCard}>
+                  <Text style={styles.clientEmptyTitle}>Комментариев пока нет</Text>
+                  <Text style={styles.clientEmptyText}>
+                    Здесь будут комментарии именно этого видео.
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+            <View style={styles.mediaCommentComposer}>
+              <TextInput
+                blurOnSubmit={false}
+                placeholder="Написать комментарий"
+                placeholderTextColor="#7E8790"
+                onChangeText={setCommentDraft}
+                onSubmitEditing={submitComment}
+                returnKeyType="send"
+                value={commentDraft}
+                style={styles.mediaCommentInput}
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={submitComment}
+                style={styles.mediaCommentSend}
+              >
+                <Send color={colors.surface} size={19} strokeWidth={2.3} />
+              </Pressable>
+            </View>
+            {commentStatus ? (
+              <Text style={styles.mediaUploadStatus}>{commentStatus}</Text>
+            ) : null}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
+function ShortsMediaSurface({
+  bottomInset,
+  fallbackSource,
+  uri,
+}: {
+  bottomInset: number;
+  fallbackSource: ReturnType<typeof getVendorImageSource>;
+  uri: string | null;
+}) {
+  const [muted, setMuted] = useState(true);
+  const player = useVideoPlayer(uri, (nextPlayer) => {
+    nextPlayer.loop = true;
+    nextPlayer.muted = true;
+  });
+  const [status, setStatus] = useState(player.status);
+
+  useEventListener(player, 'statusChange', ({ status: nextStatus }) => {
+    setStatus(nextStatus);
+    if (nextStatus === 'readyToPlay') player.play();
+  });
+
+  useEffect(() => {
+    player.muted = muted;
+    if (uri && player.status === 'readyToPlay') player.play();
+    return () => player.pause();
+  }, [muted, player, uri]);
+
+  return (
+    <View style={styles.shortsMedia}>
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="cover"
+        source={fallbackSource}
+        style={styles.shortsMedia}
+      />
+      {uri ? (
+        <VideoView
+          contentFit="cover"
+          nativeControls={false}
+          player={player}
+          playsInline
+          style={styles.shortsVideo}
+          surfaceType="textureView"
+        />
+      ) : null}
+      {uri && status !== 'readyToPlay' && status !== 'error' ? (
+        <View pointerEvents="none" style={styles.shortsLoadingState}>
+          <ActivityIndicator color={colors.surface} size="large" />
+        </View>
+      ) : null}
+      {uri && status === 'error' ? (
+        <View pointerEvents="none" style={styles.shortsLoadingState}>
+          <Text style={styles.shortsVideoErrorText}>Видео не загрузилось</Text>
+        </View>
+      ) : null}
+      {uri ? (
+        <Pressable
+          accessibilityLabel={muted ? 'Включить звук' : 'Выключить звук'}
+          accessibilityRole="button"
+          onPress={() => setMuted((value) => !value)}
+          style={[styles.shortsMuteButton, { bottom: bottomInset + 16 }]}
+        >
+          {muted ? (
+            <VolumeX color={colors.surface} size={20} strokeWidth={2.2} />
+          ) : (
+            <Volume2 color={colors.surface} size={20} strokeWidth={2.2} />
+          )}
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function ShortsVideoPreloader({ uri }: { uri: string }) {
+  useVideoPlayer(uri);
+  return null;
+}
+
 function ShortsAction({
+  accessibilityLabel,
   icon: Icon,
   label,
   active = false,
@@ -839,6 +1061,7 @@ function ShortsAction({
   iconSize,
   onPress,
 }: {
+  accessibilityLabel: string;
   icon: LucideIcon;
   label?: string;
   active?: boolean;
@@ -848,6 +1071,7 @@ function ShortsAction({
 }) {
   return (
     <Pressable
+      accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
@@ -877,15 +1101,6 @@ function ShortsAction({
   );
 }
 
-function openWhatsApp(vendor: Vendor) {
-  const phone = vendor.contactPhone.replace(/\D/g, '');
-  const message = encodeURIComponent(
-    `Здравствуйте! Нашли вас на SVADBA.kz. Хотим уточнить дату и условия: ${vendor.name}`,
-  );
-
-  void Linking.openURL(`https://wa.me/${phone}?text=${message}`).catch(() => undefined);
-}
-
 function getVendorVideoUrls(vendor: Vendor) {
   if (vendor.shortVideoUrls && vendor.shortVideoUrls.length > 0) {
     return vendor.shortVideoUrls;
@@ -894,21 +1109,11 @@ function getVendorVideoUrls(vendor: Vendor) {
   return vendor.shortVideoUrl ? [vendor.shortVideoUrl] : [];
 }
 
-function formatVendorCount(count: number) {
-  const remainder100 = count % 100;
-  const remainder10 = count % 10;
+function getVendorShortMediaId(vendor: Vendor, index: number) {
+  const media = vendor.media?.filter((item) => item.type === 'video');
+  return media?.[index]?.id || `${vendor.id}:short:${index}`;
+}
 
-  if (remainder100 >= 11 && remainder100 <= 14) {
-    return `${count} подрядчиков`;
-  }
-
-  if (remainder10 === 1) {
-    return `${count} подрядчик`;
-  }
-
-  if (remainder10 >= 2 && remainder10 <= 4) {
-    return `${count} подрядчика`;
-  }
-
-  return `${count} подрядчиков`;
+function getVendorLikeCount(vendor: Vendor) {
+  return Math.max(0, Number(vendor.likeCount ?? vendor.reviewCount ?? 0));
 }

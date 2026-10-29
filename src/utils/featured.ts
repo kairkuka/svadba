@@ -23,7 +23,7 @@ export const featuredVisualStyles: Record<FeaturedVendorStyle, FeaturedVisualSty
     badgeBorder: 'rgba(129, 119, 255, 0.46)',
     badgeText: '#D8D3FF',
     glow: 'rgba(107, 92, 255, 0.28)',
-    ringOuter: '#6B5CFF',
+    ringOuter: '#4A5DF9',
     ringInner: '#22D3EE',
   },
   royal: {

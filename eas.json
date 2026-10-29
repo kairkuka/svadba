@@ -8,27 +8,64 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_SHOW_TEST_LOGIN": "1"
+        "EXPO_PUBLIC_ALLOW_OFFLINE_AUTH": "0",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "54047682639-nof8d5db96glosi7b9r4nnsfioqtq7s8.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "54047682639-k5948jnmihhnfkad0bsoqji32s0slqbg.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_REVERSED_CLIENT_ID": "com.googleusercontent.apps.54047682639-k5948jnmihhnfkad0bsoqji32s0slqbg",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "54047682639-gisa2uvftjlpn2bv9khmtf7eg18fpove.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ENABLE_REVIEW_SCREENS": "1",
+        "EXPO_PUBLIC_SHOW_TEST_LOGIN": "0",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,
       "env": {
+        "EXPO_PUBLIC_ALLOW_OFFLINE_AUTH": "0",
         "EXPO_PUBLIC_API_BASE_URL": "https://d2ne1y5a2elsg5.cloudfront.net/api",
-        "EXPO_PUBLIC_SHOW_TEST_LOGIN": "1"
+        "EXPO_PUBLIC_APPLE_SIGN_IN_ENABLED": "1",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "54047682639-nof8d5db96glosi7b9r4nnsfioqtq7s8.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "54047682639-k5948jnmihhnfkad0bsoqji32s0slqbg.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_REVERSED_CLIENT_ID": "com.googleusercontent.apps.54047682639-k5948jnmihhnfkad0bsoqji32s0slqbg",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "54047682639-gisa2uvftjlpn2bv9khmtf7eg18fpove.apps.googleusercontent.com",
+        "EXPO_PUBLIC_ENABLE_REVIEW_SCREENS": "1",
+        "EXPO_PUBLIC_SHOW_TEST_LOGIN": "0",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
+        "EXPO_NO_DOTENV": "1",
+        "EXPO_PUBLIC_ALLOW_OFFLINE_AUTH": "0",
         "EXPO_PUBLIC_API_BASE_URL": "https://d2ne1y5a2elsg5.cloudfront.net/api",
-        "EXPO_PUBLIC_SHOW_TEST_LOGIN": "1"
+        "EXPO_PUBLIC_APPLE_SIGN_IN_ENABLED": "1",
+        "EXPO_PUBLIC_ENABLE_REVIEW_SCREENS": "0",
+        "EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID": "54047682639-nof8d5db96glosi7b9r4nnsfioqtq7s8.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "54047682639-k5948jnmihhnfkad0bsoqji32s0slqbg.apps.googleusercontent.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_REVERSED_CLIENT_ID": "com.googleusercontent.apps.54047682639-k5948jnmihhnfkad0bsoqji32s0slqbg",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "54047682639-gisa2uvftjlpn2bv9khmtf7eg18fpove.apps.googleusercontent.com",
+        "EXPO_PUBLIC_SHOW_TEST_LOGIN": "0",
+        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   },
   "submit": {
     "production": {
+      "android": {
+        "releaseStatus": "completed",
+        "track": "internal"
+      },
+      "ios": {
+        "ascAppId": "6798542274"
+      }
+    },
+    "storeProduction": {
+      "android": {
+        "releaseStatus": "draft",
+        "track": "production"
+      },
       "ios": {
         "ascAppId": "6798542274"
       }
